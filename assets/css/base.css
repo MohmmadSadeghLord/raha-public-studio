@@ -1433,3 +1433,8 @@ body, p, span, a, div, li, input, textarea, select, button, label, table {
 code, pre, kbd, samp, .terminal, .mockup, .dashicons, .raha-terminal__body, .code-tag {
     font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace !important;
 }
+
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

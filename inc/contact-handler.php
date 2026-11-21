@@ -9,6 +9,9 @@ function raha_handle_consultation() {
     if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'raha_consultation_nonce')) {
         wp_send_json(['ok' => false, 'message' => 'نشست منقضی شده. صفحه را رفرش کنید.']);
     }
+    if (!raha_check_submission_limit('consultation')) {
+        wp_send_json(['ok' => false, 'message' => 'تعداد درخواست‌ها بیش از حد مجاز است. لطفاً ۱۵ دقیقه دیگر تلاش کنید.'], 429);
+    }
 
     // ۲. Sanitize inputs
     $name    = sanitize_text_field(wp_unslash($_POST['name'] ?? ''));

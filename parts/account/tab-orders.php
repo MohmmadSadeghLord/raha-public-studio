@@ -7,15 +7,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $order_id = absint($_POST['order_id'] ?? 0);
         $order = get_post($order_id);
         
-        if ($order && $order->post_type === 'raha_order' && $order->post_author == get_current_user_id()) {
-            $status = get_post_meta($order_id, 'order_status', true);
+        if ($order && $order->post_type === 'raha_order' && $order->post_status === 'publish'
+            && (int) $order->post_author === get_current_user_id()) {
+            $status = get_post_meta($order_id, 'order_status', true) ?: 'new';
             if (in_array($status, ['new', 'review'])) {
                 update_post_meta($order_id, 'order_status', 'canceled');
-                echo '<div style="padding:10px; background:#dcfce7; color:#14532d; border-radius:6px; margin-bottom:15px; font-weight:bold;">سفارش شما با موفقیت لغو شد.</div>';
+                delete_transient('raha_dashboard_stats');
+                echo '<div role="status" style="padding:10px; background:#dcfce7; color:#14532d; border-radius:6px; margin-bottom:15px; font-weight:bold;">سفارش شما با موفقیت لغو شد.</div>';
             } else {
-                echo '<div style="padding:10px; background:#fee2e2; color:#7f1d1d; border-radius:6px; margin-bottom:15px; font-weight:bold;">امکان لغو این سفارش وجود ندارد (در حال انجام است).</div>';
+                echo '<div role="alert" style="padding:10px; background:#fee2e2; color:#7f1d1d; border-radius:6px; margin-bottom:15px; font-weight:bold;">امکان لغو این سفارش وجود ندارد (در حال انجام است).</div>';
             }
+        } else {
+            echo '<div role="alert" class="raha-auth__alert">امکان لغو این سفارش وجود ندارد.</div>';
         }
+    } else {
+        echo '<div role="alert" class="raha-auth__alert">نشست منقضی شده است. صفحه را تازه‌سازی کنید.</div>';
     }
 }
 

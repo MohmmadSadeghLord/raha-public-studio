@@ -11,13 +11,25 @@ class Raha_Template_Demo {
     const META_ZIP    = 'demo_zip_file';       // ID فایل آپلودشده
     const META_ENTRY  = 'demo_entry_file';     // مسیر نسبی index.html
     const META_FOLDER = 'demo_folder';         // مسیر پوشه استخراج‌شده
+    const MAX_ARCHIVE_SIZE = 20 * 1024 * 1024;
+    const MAX_EXTRACTED_SIZE = 50 * 1024 * 1024;
+    const MAX_ENTRY_SIZE = 10 * 1024 * 1024;
+    const MAX_FILES = 200;
 
     public static function init() {
+        add_action('init', [__CLASS__, 'protect_existing_demos']);
         add_action('add_meta_boxes',               [__CLASS__, 'add_meta_box']);
         add_action('save_post_raha_template',      [__CLASS__, 'handle_upload'], 10, 2);
         add_action('before_delete_post',           [__CLASS__, 'cleanup']);
         add_action('wp_ajax_raha_gen_screenshot',  [__CLASS__, 'ajax_screenshot']);
         add_action('admin_enqueue_scripts',        [__CLASS__, 'admin_assets']);
+    }
+
+    public static function protect_existing_demos() {
+        $uploads = wp_upload_dir();
+        if (is_dir(trailingslashit($uploads['basedir']) . self::UPLOAD_DIR)) {
+            self::protect_demo_root($uploads['basedir']);
+        }
     }
 
     /* ============================================================
@@ -54,7 +66,7 @@ class Raha_Template_Demo {
                 <label for="raha_demo_file" style="display:block;font-weight:700;margin-bottom:6px;">
                     فایل ZIP یا HTML
                 </label>
-                <input type="file" name="raha_demo_file" id="raha_demo_file" accept=".zip,.html">
+                <input type="file" name="raha_demo_file" id="raha_demo_file" accept=".zip,.html,.htm">
                 <?php if ($zip_url) : ?>
                     <span style="display:inline-block;margin-inline-start:8px;font-size:12px;color:#16a34a;">
                         ✅ فایل فعلی: <a href="<?php echo esc_url($zip_url); ?>" target="_blank"><?php echo esc_html(basename($zip_url)); ?></a>
@@ -150,7 +162,7 @@ class Raha_Template_Demo {
         if (!isset($_POST['raha_demo_nonce'])) return;
         if (!wp_verify_nonce($_POST['raha_demo_nonce'], 'raha_demo_upload')) return;
         if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
-        if (!current_user_can('edit_post', $post_id)) return;
+        if (!current_user_can('manage_options') || !current_user_can('edit_post', $post_id)) return;
         if ($post->post_type !== 'raha_template') return;
 
         /* حذف فایل فعلی */
@@ -176,27 +188,55 @@ class Raha_Template_Demo {
             self::admin_notice('فرمت فایل باید ZIP یا HTML باشد.', 'error');
             return;
         }
+        if (!isset($file['size'], $file['error']) || $file['size'] <= 0 || $file['size'] > self::MAX_ARCHIVE_SIZE || $file['error'] !== UPLOAD_ERR_OK) {
+            self::admin_notice('آپلود باید کامل و حجم فایل کمتر از ۲۰ مگابایت باشد.', 'error');
+            return;
+        }
 
-        // آپلود فایل به رسانه
-        $attachment_id = media_handle_upload('raha_demo_file', $post_id);
-        if (is_wp_error($attachment_id)) {
-            self::admin_notice('خطا در آپلود: ' . $attachment_id->get_error_message(), 'error');
+        // HTML must not be published as a second, unprotected media URL.
+        $attachment_id = 0;
+        $source_path = $file['tmp_name'];
+        if ($ext === 'zip') {
+            if (!self::validate_zip($source_path)) {
+                self::admin_notice('ZIP شامل مسیر، نوع فایل یا حجم غیرمجاز است.', 'error');
+                return;
+            }
+            $attachment_id = media_handle_upload('raha_demo_file', $post_id);
+            if (is_wp_error($attachment_id)) {
+                self::admin_notice('خطا در آپلود: ' . $attachment_id->get_error_message(), 'error');
+                return;
+            }
+            $source_path = get_attached_file($attachment_id);
+        }
+        $uploads = wp_upload_dir();
+        if (!self::protect_demo_root($uploads['basedir'])) {
+            self::admin_notice('امکان محافظت از پوشه دمو وجود ندارد.', 'error');
             return;
         }
 
         // حذف فایل قبلی
         self::delete_demo_files($post_id);
 
-        update_post_meta($post_id, self::META_ZIP, $attachment_id);
+        if ($attachment_id) update_post_meta($post_id, self::META_ZIP, $attachment_id);
+        else delete_post_meta($post_id, self::META_ZIP);
 
         // استخراج یا کپی
         if ($ext === 'zip') {
-            $entry = self::extract_zip($post_id, get_attached_file($attachment_id));
+            $entry = self::extract_zip($post_id, $source_path);
         } else {
-            $entry = self::copy_html($post_id, get_attached_file($attachment_id));
+            $entry = self::copy_html($post_id, $source_path);
         }
 
         if ($entry === false) {
+            $failed_folder = trailingslashit($uploads['basedir']) . self::UPLOAD_DIR . '/tpl-' . (int) $post_id;
+            if (is_dir($failed_folder)) self::rrmdir($failed_folder);
+            delete_post_meta($post_id, self::META_ZIP);
+            delete_post_meta($post_id, self::META_ENTRY);
+            delete_post_meta($post_id, self::META_FOLDER);
+            $auto_url_prefix = trailingslashit($uploads['baseurl']) . self::UPLOAD_DIR . '/tpl-' . (int) $post_id . '/';
+            $demo_url = get_post_meta($post_id, 'demo_url', true);
+            if (strpos($demo_url, $auto_url_prefix) === 0) delete_post_meta($post_id, 'demo_url');
+            if ($attachment_id) wp_delete_attachment($attachment_id, true);
             self::admin_notice('خطا در استخراج فایل.', 'error');
             return;
         }
@@ -222,8 +262,10 @@ class Raha_Template_Demo {
             self::admin_notice('ZipArchive در PHP فعال نیست.', 'error');
             return false;
         }
+        if (!self::validate_zip($zip_path)) return false;
 
         $uploads = wp_upload_dir();
+        if (!self::protect_demo_root($uploads['basedir'])) return false;
         $folder  = trailingslashit($uploads['basedir']) . self::UPLOAD_DIR . '/tpl-' . $post_id;
         $folder_url = trailingslashit($uploads['baseurl']) . self::UPLOAD_DIR . '/tpl-' . $post_id;
 
@@ -233,25 +275,30 @@ class Raha_Template_Demo {
             return false;
         }
 
-        // محافظت PHP
-        file_put_contents($folder . '/.htaccess', "php_flag engine off\n<FilesMatch \"\\.php$\">\n  Deny from all\n</FilesMatch>");
-
         // استخراج
         $zip = new ZipArchive();
         if ($zip->open($zip_path) !== true) return false;
 
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $name = $zip->getNameIndex($i);
-            // Zip Slip prevention
-            if (strpos($name, '..') !== false || strpos($name, "\0") !== false) continue;
             if (substr($name, -1) === '/') continue; // پوشه
-            // فایل‌های مخفی و php رو رد کن
-            $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-            if (in_array($ext, ['php', 'phtml', 'phar', 'exe', 'sh', 'bat'], true)) continue;
-
             $target = $folder . '/' . $name;
-            wp_mkdir_p(dirname($target));
-            file_put_contents($target, $zip->getFromIndex($i));
+            if (!wp_mkdir_p(dirname($target))) { $zip->close(); return false; }
+            $source = $zip->getStream($name);
+            $dest = fopen($target, 'wb');
+            if (!$source || !$dest) {
+                if (is_resource($source)) fclose($source);
+                if (is_resource($dest)) fclose($dest);
+                $zip->close();
+                return false;
+            }
+            $written = stream_copy_to_stream($source, $dest, self::MAX_ENTRY_SIZE + 1);
+            fclose($source);
+            fclose($dest);
+            $stat = $zip->statIndex($i);
+            if ($written === false || $written > self::MAX_ENTRY_SIZE || $written !== (int) $stat['size']) {
+                $zip->close(); return false;
+            }
         }
 
         $zip->close();
@@ -270,17 +317,54 @@ class Raha_Template_Demo {
         ];
     }
 
+    private static function validate_zip($zip_path) {
+        if (!class_exists('ZipArchive') || !$zip_path || filesize($zip_path) > self::MAX_ARCHIVE_SIZE) return false;
+        $zip = new ZipArchive();
+        if ($zip->open($zip_path) !== true) return false;
+        $total = 0;
+        $files = 0;
+        $has_html = false;
+        $allowed = ['html', 'htm', 'css', 'js', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'woff', 'woff2'];
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $stat = $zip->statIndex($i);
+            $name = $stat['name'] ?? '';
+            if (!$name || strpos($name, "\\") !== false || strpos($name, "\0") !== false || $name[0] === '/') {
+                $zip->close(); return false;
+            }
+            foreach (explode('/', rtrim($name, '/')) as $segment) {
+                if ($segment === '' || $segment[0] === '.' || strpos($segment, ':') !== false) {
+                    $zip->close(); return false;
+                }
+            }
+            if ($zip->getExternalAttributesIndex($i, $opsys, $attributes)
+                && ((($attributes >> 16) & 0170000) === 0120000)) {
+                $zip->close(); return false;
+            }
+            if (substr($name, -1) === '/') continue;
+            $files++;
+            $size = (int) ($stat['size'] ?? 0);
+            $total += $size;
+            $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+            if (in_array($extension, ['html', 'htm'], true)) $has_html = true;
+            if ($files > self::MAX_FILES || $size > self::MAX_ENTRY_SIZE || $total > self::MAX_EXTRACTED_SIZE
+                || !in_array($extension, $allowed, true)) {
+                $zip->close(); return false;
+            }
+        }
+        $zip->close();
+        return $files > 0 && $has_html;
+    }
+
     /* ============================================================
        ۴. کپی HTML تکی
        ============================================================ */
     private static function copy_html($post_id, $html_path) {
         $uploads = wp_upload_dir();
+        if (!self::protect_demo_root($uploads['basedir'])) return false;
         $folder  = trailingslashit($uploads['basedir']) . self::UPLOAD_DIR . '/tpl-' . $post_id;
         $folder_url = trailingslashit($uploads['baseurl']) . self::UPLOAD_DIR . '/tpl-' . $post_id;
 
         if (!wp_mkdir_p($folder)) return false;
-        file_put_contents($folder . '/.htaccess', "php_flag engine off");
-
         $dest = $folder . '/index.html';
         if (!copy($html_path, $dest)) return false;
 
@@ -289,6 +373,15 @@ class Raha_Template_Demo {
             'folder' => $folder,
             'url'    => trailingslashit($folder_url) . 'index.html',
         ];
+    }
+
+    private static function protect_demo_root($uploads_base) {
+        $root = trailingslashit($uploads_base) . self::UPLOAD_DIR;
+        if (!wp_mkdir_p($root)) return false;
+        $rules = "Options -Indexes\n<IfModule mod_headers.c>\nHeader always set Content-Security-Policy \"sandbox allow-scripts allow-forms\"\nHeader always set X-Content-Type-Options \"nosniff\"\n</IfModule>\n";
+        $config = $root . '/.htaccess';
+        if (is_file($config) && file_get_contents($config) === $rules) return true;
+        return file_put_contents($config, $rules) !== false;
     }
 
     /* ============================================================
@@ -381,9 +474,10 @@ class Raha_Template_Demo {
 
     private static function delete_demo_files($post_id) {
         $folder = get_post_meta($post_id, self::META_FOLDER, true);
-        if ($folder && is_dir($folder) && strpos($folder, 'raha-templates') !== false) {
-            self::rrmdir($folder);
-        }
+        $uploads = wp_upload_dir();
+        $expected = trailingslashit($uploads['basedir']) . self::UPLOAD_DIR . '/tpl-' . (int) $post_id;
+        if (!$folder || !is_dir($folder) || realpath($folder) !== realpath($expected)) return;
+        self::rrmdir($expected);
     }
 
     private static function rrmdir($dir) {

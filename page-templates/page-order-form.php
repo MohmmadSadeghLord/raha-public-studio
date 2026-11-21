@@ -16,17 +16,17 @@ get_header();
 
         <div class="raha-order-progress">
             <div class="raha-order-progress__info">
-                <span id="stepLabel">مرحله ۱ از ۱۰</span>
+                <span id="stepLabel" aria-live="polite">مرحله ۱ از ۱۰</span>
                 <span id="stepPercent">۱۰٪</span>
             </div>
-            <div class="raha-order-progress__track">
+            <div class="raha-order-progress__track" id="orderProgress" role="progressbar" aria-label="پیشرفت ثبت سفارش" aria-valuemin="0" aria-valuemax="100" aria-valuenow="10">
                 <div class="raha-order-progress__fill" id="progressFill"></div>
             </div>
         </div>
 
-        <main class="raha-order-step" id="stepContainer"></main>
+        <section class="raha-order-step" id="stepContainer" aria-label="مرحله جاری سفارش"></section>
 
-        <div class="raha-order-error" id="orderError" role="alert"></div>
+        <div class="raha-order-error" id="orderError" role="alert" tabindex="-1"></div>
 
         <nav class="raha-order-nav">
             <button type="button" class="raha-btn raha-btn--ghost" id="backBtn">→ قبلی</button>

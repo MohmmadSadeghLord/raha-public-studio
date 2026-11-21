@@ -8,7 +8,7 @@ add_action('admin_menu', function() {
     add_menu_page(
         'مدیریت ارتباطات',
         'مدیریت ارتباطات',
-        'manage_options',
+        'raha_manage_orders',
         'raha-communications',
         'raha_render_communications_page',
         'dashicons-networking',
@@ -17,13 +17,13 @@ add_action('admin_menu', function() {
 });
 
 function raha_render_communications_page() {
-    if (!current_user_can('manage_options')) return;
+    if (!Raha_RBAC::can_cap('raha_manage_orders')) return;
 
     // دریافت تعداد آیتم‌های جدید برای نشانگرهای دایره‌ای
     $counts = [
         'consultation' => count(get_posts(['post_type' => 'raha_consultation', 'post_status' => 'publish', 'meta_key' => 'lead_status', 'meta_value' => 'new', 'fields' => 'ids'])),
         'order'        => count(get_posts(['post_type' => 'raha_order', 'post_status' => 'publish', 'meta_key' => 'order_status', 'meta_value' => 'new', 'fields' => 'ids'])),
-        'lead'         => count(get_posts(['post_type' => 'raha_lead', 'post_status' => 'publish', 'meta_key' => 'lead_status', 'meta_value' => 'new', 'fields' => 'ids'])),
+        'lead'         => count(get_posts(['post_type' => 'raha_lead', 'post_status' => 'publish', 'meta_key' => 'lead_status', 'meta_value' => 'unread', 'fields' => 'ids'])),
     ];
 
     // آمار کلی
@@ -143,6 +143,15 @@ function raha_render_communications_page() {
 /**
  * تابع رندر جدول برای هر تب
  */
+function raha_comm_statuses($post_type) {
+    $statuses = [
+        'raha_order' => ['new' => 'جدید', 'review' => 'در حال بررسی', 'progress' => 'در حال انجام', 'done' => 'تکمیل شده', 'canceled' => 'لغو شده'],
+        'raha_consultation' => ['new' => 'جدید', 'review' => 'در حال بررسی', 'contacted' => 'تماس گرفته شد', 'scheduled' => 'جلسه تنظیم شد', 'converted' => 'تبدیل شد', 'spam' => 'اسپم'],
+        'raha_lead' => ['unread' => 'خوانده نشده', 'read' => 'خوانده شده', 'contacted' => 'تماس گرفته شد', 'following' => 'در حال پیگیری', 'converted' => 'تبدیل شد', 'spam' => 'اسپم'],
+    ];
+    return $statuses[$post_type] ?? [];
+}
+
 function raha_render_comm_table($post_type, $status_meta_key, $type) {
     $posts = get_posts([
         'post_type'      => $post_type,
@@ -159,6 +168,8 @@ function raha_render_comm_table($post_type, $status_meta_key, $type) {
 
     $statuses = [
         'new'              => ['label' => 'جدید', 'color' => 'badge-yellow'],
+        'unread'           => ['label' => 'خوانده نشده', 'color' => 'badge-yellow'],
+        'read'             => ['label' => 'خوانده شده', 'color' => 'badge-blue'],
         'review'           => ['label' => 'در حال بررسی', 'color' => 'badge-blue'],
         'contacted'        => ['label' => 'تماس گرفته شد', 'color' => 'badge-orange'],
         'scheduled'        => ['label' => 'جلسه تنظیم شد', 'color' => 'badge-purple'],
@@ -186,7 +197,7 @@ function raha_render_comm_table($post_type, $status_meta_key, $type) {
             <?php foreach ($posts as $post) : 
                 $name    = get_post_meta($post->ID, 'lead_name', true) ?: ($post->post_type === 'raha_order' ? get_post_meta($post->ID, 'full_name', true) : '—');
                 $contact = get_post_meta($post->ID, 'lead_contact', true) ?: get_post_meta($post->ID, 'contact_value', true);
-                $status  = get_post_meta($post->ID, $status_meta_key, true) ?: 'new';
+                $status  = get_post_meta($post->ID, $status_meta_key, true) ?: ($post_type === 'raha_lead' ? 'unread' : 'new');
                 
                 // خلاصه
                 $summary = '';
@@ -211,8 +222,11 @@ function raha_render_comm_table($post_type, $status_meta_key, $type) {
                     <td><span class="comm-summary"><?php echo esc_html($summary); ?></span></td>
                     <td>
                         <select class="comm-status-select" data-id="<?php echo esc_attr($post->ID); ?>" data-meta="<?php echo esc_attr($status_meta_key); ?>">
-                            <?php foreach ($statuses as $val => $data) : ?>
-                                <option value="<?php echo esc_attr($val); ?>" <?php selected($status, $val); ?>><?php echo esc_html($data['label']); ?></option>
+                            <?php if (!array_key_exists($status, raha_comm_statuses($post_type))) : ?>
+                                <option value="" selected disabled><?php echo esc_html($status); ?></option>
+                            <?php endif; ?>
+                            <?php foreach (raha_comm_statuses($post_type) as $val => $label) : ?>
+                                <option value="<?php echo esc_attr($val); ?>" <?php selected($status, $val); ?>><?php echo esc_html($label); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </td>
@@ -231,34 +245,40 @@ function raha_render_comm_table($post_type, $status_meta_key, $type) {
    AJAX: ذخیره وضعیت جدید
    ============================================================ */
 add_action('wp_ajax_raha_update_comm_status', function() {
-    if (!current_user_can('manage_options') || !check_ajax_referer('raha_comm_nonce', 'nonce', false)) {
+    if (!Raha_RBAC::can_cap('raha_manage_orders') || !check_ajax_referer('raha_comm_nonce', 'nonce', false)) {
         wp_send_json_error(['message' => 'دسترسی غیرمجاز']);
     }
     
-    $post_id  = absint($_POST['post_id']);
-    $meta_key = sanitize_text_field($_POST['meta_key']);
-    $status   = sanitize_text_field($_POST['status']);
-
-    if ($post_id && $meta_key && $status) {
-        update_post_meta($post_id, $meta_key, $status);
-        wp_send_json_success(['message' => 'وضعیت به‌روزرسانی شد.']);
+    $post_id  = absint($_POST['post_id'] ?? 0);
+    $post_type = get_post_type($post_id);
+    $expected_key = $post_type === 'raha_order' ? 'order_status' : 'lead_status';
+    $meta_key = sanitize_key(wp_unslash($_POST['meta_key'] ?? ''));
+    $status = sanitize_key(wp_unslash($_POST['status'] ?? ''));
+    if (!$post_id || !$post_type || get_post_status($post_id) !== 'publish' || $meta_key !== $expected_key
+        || !array_key_exists($status, raha_comm_statuses($post_type))) {
+        wp_send_json_error(['message' => 'وضعیت یا نوع درخواست نامعتبر است.'], 400);
     }
-    wp_send_json_error(['message' => 'خطا در ذخیره‌سازی.']);
+    update_post_meta($post_id, $expected_key, $status);
+    if ($post_type === 'raha_order') delete_transient('raha_dashboard_stats');
+    wp_send_json_success(['message' => 'وضعیت به‌روزرسانی شد.']);
 });
 
 /* ============================================================
    AJAX: دریافت جزئیات برای مودال
    ============================================================ */
 add_action('wp_ajax_raha_get_comm_details', function() {
-    if (!current_user_can('manage_options') || !check_ajax_referer('raha_comm_nonce', 'nonce', false)) {
+    if (!Raha_RBAC::can_cap('raha_manage_orders') || !check_ajax_referer('raha_comm_nonce', 'nonce', false)) {
         wp_send_json_error(['message' => 'دسترسی غیرمجاز']);
     }
     
-    $post_id = absint($_POST['post_id']);
-    $type    = sanitize_text_field($_POST['type']);
+    $post_id = absint($_POST['post_id'] ?? 0);
+    $type    = sanitize_key(wp_unslash($_POST['type'] ?? ''));
     $post    = get_post($post_id);
 
-    if (!$post) wp_send_json_error(['message' => 'درخواست یافت نشد.']);
+    $types = ['order' => 'raha_order', 'consultation' => 'raha_consultation', 'lead' => 'raha_lead'];
+    if (!$post || $post->post_status !== 'publish' || !isset($types[$type]) || $post->post_type !== $types[$type]) {
+        wp_send_json_error(['message' => 'درخواست یافت نشد.'], 404);
+    }
 
     // دریافت تمام متادیتا
     $meta = get_post_meta($post_id);

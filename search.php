@@ -8,13 +8,13 @@ get_header();
 
     <!-- Search Bar -->
     <section class="search" aria-label="نوار جست‌وجو">
-      <form class="search__form" id="searchForm" role="search" autocomplete="off" novalidate>
+      <form class="search__form" id="searchForm" role="search" autocomplete="off" novalidate method="get" action="<?php echo esc_url(home_url('/')); ?>">
         <label class="sr-only" for="q">جست‌وجو در نوشته‌ها</label>
         <div class="search__field" id="searchField">
           <span class="search__icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
           </span>
-          <input id="q" class="search__input" type="search" name="q" placeholder="مثلاً: CSS، سئو، دیزاین سیستم…" role="combobox" aria-expanded="false" aria-controls="spPanel" aria-autocomplete="list" enterkeyhint="search" spellcheck="false" maxlength="80">
+          <input id="q" class="search__input" type="search" name="s" value="<?php echo esc_attr(get_search_query()); ?>" placeholder="مثلاً: CSS، سئو، دیزاین سیستم…" role="combobox" aria-expanded="false" aria-controls="spPanel" aria-autocomplete="list" enterkeyhint="search" spellcheck="false" maxlength="80">
           <button type="button" class="search__clear" id="clearBtn" hidden aria-label="پاک کردن عبارت جست‌وجو">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
@@ -74,6 +74,26 @@ get_header();
     <!-- Results -->
     <div class="results" id="results" aria-live="polite" aria-label="نتایج جست‌وجو"></div>
 
+    <noscript>
+      <div class="results" aria-label="نتایج جست‌وجو">
+        <?php if (have_posts()) : while (have_posts()) : the_post(); ?>
+          <article class="post">
+            <div class="post__body">
+              <h3 class="post__title"><a class="post__title-link" href="<?php echo esc_url(get_permalink()); ?>"><?php echo esc_html(get_the_title()); ?></a></h3>
+              <p class="post__desc"><?php echo esc_html(wp_strip_all_tags(get_the_excerpt())); ?></p>
+              <div class="post__foot"><span class="post__date"><?php echo esc_html(get_the_date()); ?></span></div>
+            </div>
+          </article>
+        <?php endwhile; else : ?>
+          <p>نتیجه‌ای پیدا نشد.</p>
+        <?php endif; ?>
+      </div>
+      <nav class="pager" aria-label="صفحه‌بندی نتایج">
+        <?php echo get_previous_posts_link('صفحه قبل'); ?>
+        <?php echo get_next_posts_link('صفحه بعد'); ?>
+      </nav>
+    </noscript>
+
     <!-- Empty -->
     <div class="empty" id="empty" hidden>
       <div class="empty__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg></div>
@@ -81,6 +101,7 @@ get_header();
       <p class="empty__text" id="emptyText">برای عبارت وارد شده نوشته‌ای نداریم.</p>
       <div class="panel__chips" id="emptyChips"></div>
       <button type="button" class="chip is-accent" id="emptyReset">نمایش همه نوشته‌ها</button>
+      <button type="button" class="chip is-accent" id="retrySearch" hidden>تلاش دوباره</button>
     </div>
 
     <!-- Pager -->

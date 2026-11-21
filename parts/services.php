@@ -4,11 +4,12 @@ if (!defined('ABSPATH')) exit;
 $services = get_posts([
     'post_type'      => 'raha_service',
     'posts_per_page' => -1,
+    'post_status'    => 'publish',
     'orderby'        => ['menu_order' => 'ASC', 'date' => 'DESC'],
 ]);
 if (empty($services)) return;
 ?>
-<section class="raha-section raha-services">
+<section class="raha-section raha-services" id="services">
     <div class="raha-container">
         <header class="raha-section__head">
             <p class="raha-eyebrow">خدمات</p>

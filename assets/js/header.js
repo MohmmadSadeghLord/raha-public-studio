@@ -140,10 +140,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if(openBtn) openBtn.setAttribute('aria-expanded', 'true');
         originalOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
+        if (closeBtn) closeBtn.focus();
     }
     
     function closeDrawer() {
-        if(!drawer || !overlay) return;
+        if(!drawer || !overlay || !drawer.classList.contains('is-open')) return;
         drawer.classList.remove('is-open');
         overlay.classList.remove('is-open');
         if(openBtn) {
@@ -158,7 +159,15 @@ document.addEventListener('DOMContentLoaded', function() {
     if (overlay) overlay.addEventListener('click', closeDrawer);
     
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') closeDrawer();
+        if (!drawer || !drawer.classList.contains('is-open')) return;
+        if (e.key === 'Escape') { e.preventDefault(); closeDrawer(); return; }
+        if (e.key !== 'Tab') return;
+        const focusable = Array.from(drawer.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), summary'));
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
 
     // ---------- 4. منوی کاربر (آواتار در هدر دسکتاپ) ----------

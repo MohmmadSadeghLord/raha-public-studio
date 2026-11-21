@@ -160,6 +160,11 @@ body[data-theme="dark"] #raha-admin-app {
   transition: transform var(--t);
   flex-shrink: 0;
 }
+.raha-sidebar-overlay[hidden] { display: none !important; }
+.raha-sidebar-overlay {
+  position: fixed; inset: 32px 0 0; z-index: var(--z-drawer-overlay);
+  border: 0; background: rgba(20,17,15,.55); cursor: pointer;
+}
 .raha-sidebar-header {
   padding: var(--s-5) var(--s-5);
   border-bottom: var(--bd);
@@ -199,7 +204,7 @@ body[data-theme="dark"] #raha-admin-app {
   text-decoration: none;
   border: 2px solid transparent;
   border-radius: var(--r-sm);
-  transition: all var(--t);
+  transition: background var(--t), color var(--t), border-color var(--t), box-shadow var(--t);
 }
 .raha-nav-item:hover { background: var(--surface-2); }
 .raha-nav-item.active {
@@ -1342,10 +1347,11 @@ body[data-theme="dark"] .raha-tooltip::after { background: #e2e8f0; color: #0b12
   box-shadow: -10px 0 0 rgba(20,17,15,0.05);
   z-index: var(--z-drawer);
   transform: translateX(100%);
+  visibility: hidden;
   transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex; flex-direction: column;
 }
-.raha-drawer.active { transform: translateX(0); }
+.raha-drawer.active { transform: translateX(0); visibility: visible; }
 .raha-drawer-header {
   padding: var(--s-5);
   border-bottom: var(--bd);
@@ -1371,7 +1377,7 @@ body[data-theme="dark"] .raha-tooltip::after { background: #e2e8f0; color: #0b12
   display: flex; align-items: flex-start; justify-content: center;
   padding-top: 10vh;
   opacity: 0; visibility: hidden;
-  transition: all 0.2s;
+  transition: opacity 0.2s;
 }
 .raha-palette-overlay.active { opacity: 1; visibility: visible; }
 .raha-palette {
@@ -1414,6 +1420,9 @@ body[data-theme="dark"] .raha-tooltip::after { background: #e2e8f0; color: #0b12
   display: flex; align-items: center; gap: var(--s-3);
 }
 .raha-palette-results li.selected { background: var(--accent); color: #fff; }
+.raha-palette-results li { padding: 0; }
+.raha-palette-results button { display: block; width: 100%; padding: var(--s-3) var(--s-4); text-align: start; color: var(--ink); background: transparent; border: 0; border-radius: var(--r-sm); font: inherit; cursor: pointer; }
+.raha-palette-results button:hover, .raha-palette-results button:focus-visible { background: var(--accent); color: #fff; }
 
 /* ============ LEGACY STATUS BADGES (backward compat) ============ */
 .raha-badge {
@@ -1471,12 +1480,21 @@ body[data-theme="dark"] .raha-tooltip::after { background: #e2e8f0; color: #0b12
     top: 32px; bottom: 0;
     inset-inline-start: 0;
     transform: translateX(100%);
+    visibility: hidden;
+    width: min(260px, calc(100vw - 40px));
+    overflow-y: auto;
+    z-index: var(--z-drawer);
     box-shadow: -10px 0 20px rgba(0,0,0,0.1);
   }
-  .raha-sidebar.active { transform: translateX(0); }
+  .raha-sidebar.active { transform: translateX(0); visibility: visible; }
   .raha-mobile-toggle { display: block; }
   .raha-topbar { padding: 0 var(--s-4); }
   .raha-content { padding: var(--s-4); }
+}
+@media (max-width: 782px) {
+  .raha-sidebar { top: 46px; }
+  .raha-sidebar-overlay { top: 46px; }
+  .raha-topbar { top: 46px; }
 }
 @media (max-width: 600px) {
   .raha-form-grid { grid-template-columns: 1fr; }

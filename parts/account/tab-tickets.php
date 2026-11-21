@@ -6,12 +6,14 @@ $user = wp_get_current_user();
 /* ۱. ثبت تیکت جدید */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['raha_action']) && $_POST['raha_action'] === 'new_ticket') {
     if (wp_verify_nonce($_POST['_raha_ticket_nonce'] ?? '', 'raha_new_ticket')) {
-        $subject  = sanitize_text_field($_POST['ticket_subject'] ?? '');
-        $message  = sanitize_textarea_field($_POST['ticket_message'] ?? '');
-        $priority = sanitize_text_field($_POST['ticket_priority'] ?? 'normal');
-        $category = sanitize_text_field($_POST['ticket_category'] ?? '');
+        $subject  = sanitize_text_field(wp_unslash($_POST['ticket_subject'] ?? ''));
+        $message  = sanitize_textarea_field(wp_unslash($_POST['ticket_message'] ?? ''));
+        $priority = sanitize_text_field(wp_unslash($_POST['ticket_priority'] ?? 'normal'));
+        $category = sanitize_text_field(wp_unslash($_POST['ticket_category'] ?? ''));
+        if (!in_array($priority, ['low', 'normal', 'high'], true)) $priority = 'normal';
+        if (!in_array($category, ['technical', 'billing', 'request', 'other'], true)) $category = 'other';
 
-        if ($subject && strlen($message) >= 10) {
+        if ($subject && mb_strlen($message, 'UTF-8') >= 10) {
             $ticket_id = wp_insert_post([
                 'post_type'    => 'raha_ticket',
                 'post_status'  => 'publish',
@@ -23,15 +25,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['raha_action']) && $_P
                     'priority'      => $priority,
                     'category'      => $category,
                 ],
-            ]);
-            if (!is_wp_error($ticket_id)) {
+            ], true);
+            if ($ticket_id && !is_wp_error($ticket_id)) {
                 $admin_email = get_option('admin_email');
                 @wp_mail($admin_email, '[تیکت جدید] ' . $subject, $message . "\n\n" . admin_url('post.php?post=' . $ticket_id . '&action=edit'));
-                echo '<div class="raha-auth__alert" style="background:#dcfce7;border-color:#16a34a;color:#14532d;">تیکت شما با موفقیت ثبت شد.</div>';
+                echo '<div class="raha-auth__alert" role="status" style="background:#dcfce7;border-color:#16a34a;color:#14532d;">تیکت شما با موفقیت ثبت شد.</div>';
+            } else {
+                echo '<div class="raha-auth__alert" role="alert">تیکت ثبت نشد. دوباره تلاش کنید.</div>';
             }
         } else {
-            echo '<div class="raha-auth__alert">موضوع و متن (حداقل ۱۰ کاراکتر) الزامی است.</div>';
+            echo '<div class="raha-auth__alert" role="alert">موضوع و متن (حداقل ۱۰ کاراکتر) الزامی است.</div>';
         }
+    } else {
+        echo '<div class="raha-auth__alert" role="alert">نشست منقضی شده است. صفحه را تازه‌سازی کنید.</div>';
     }
 }
 
@@ -39,10 +45,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['raha_action']) && $_P
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['raha_action']) && $_POST['raha_action'] === 'reply_ticket') {
     if (wp_verify_nonce($_POST['_raha_reply_nonce'] ?? '', 'raha_reply_ticket')) {
         $ticket_id = absint($_POST['ticket_id'] ?? 0);
-        $reply_text = sanitize_textarea_field($_POST['ticket_reply'] ?? '');
+        $reply_text = sanitize_textarea_field(wp_unslash($_POST['ticket_reply'] ?? ''));
         
         $ticket = get_post($ticket_id);
-        if ($ticket && $ticket->post_author == $user->ID && $reply_text) {
+        if ($ticket && $ticket->post_type === 'raha_ticket' && $ticket->post_status === 'publish'
+            && (int) $ticket->post_author === (int) $user->ID && $reply_text) {
             $comment_data = [
                 'comment_post_ID'      => $ticket_id,
                 'comment_author'       => $user->display_name,
@@ -51,10 +58,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['raha_action']) && $_P
                 'comment_approved'     => 1,
                 'user_id'              => $user->ID,
             ];
-            wp_insert_comment($comment_data);
-            update_post_meta($ticket_id, 'ticket_status', 'waiting'); // تغییر وضعیت به در انتظار ادمین
-            echo '<div class="raha-auth__alert" style="background:#dcfce7;border-color:#16a34a;color:#14532d;">پاسخ شما ارسال شد.</div>';
+            $comment_id = wp_insert_comment($comment_data);
+            if ($comment_id) {
+                update_post_meta($ticket_id, 'ticket_status', 'open'); // پاسخ مشتری نیاز به رسیدگی پشتیبانی دارد.
+                echo '<div class="raha-auth__alert" role="status" style="background:#dcfce7;border-color:#16a34a;color:#14532d;">پاسخ شما ارسال شد.</div>';
+            } else {
+                echo '<div class="raha-auth__alert" role="alert">پاسخ ثبت نشد. دوباره تلاش کنید.</div>';
+            }
+        } else {
+            echo '<div class="raha-auth__alert" role="alert">امکان پاسخ به این تیکت وجود ندارد.</div>';
         }
+    } else {
+        echo '<div class="raha-auth__alert" role="alert">نشست منقضی شده است. صفحه را تازه‌سازی کنید.</div>';
     }
 }
 
@@ -117,12 +132,13 @@ $tickets = get_posts([
         <div class="raha-ticket-list">
             <?php foreach ($tickets as $t) :
                 $status = get_post_meta($t->ID, 'ticket_status', true) ?: 'open';
+                $ticket_labels = ['open' => 'باز', 'progress' => 'در حال بررسی', 'waiting' => 'در انتظار پاسخ', 'closed' => 'بسته‌شده'];
                 $comments = get_comments(['post_id' => $t->ID, 'status' => 'approve', 'order' => 'ASC']);
             ?>
                 <div class="raha-ticket">
                     <div class="raha-ticket__head">
                         <strong><?php echo esc_html($t->post_title); ?></strong>
-                        <span class="raha-badge raha-badge--ticket-<?php echo esc_attr($status); ?>"><?php echo esc_html($status); ?></span>
+                        <span class="raha-badge raha-badge--ticket-<?php echo esc_attr($status); ?>"><?php echo esc_html($ticket_labels[$status] ?? 'نامشخص'); ?></span>
                     </div>
                     <p class="raha-ticket__meta"><?php echo esc_html(get_the_date('', $t)); ?></p>
                     <div class="raha-ticket__content">
@@ -148,7 +164,8 @@ $tickets = get_posts([
                         <?php wp_nonce_field('raha_reply_ticket', '_raha_reply_nonce'); ?>
                         <input type="hidden" name="raha_action" value="reply_ticket">
                         <input type="hidden" name="ticket_id" value="<?php echo esc_attr($t->ID); ?>">
-                        <textarea name="ticket_reply" class="raha-field__input" rows="2" placeholder="پاسخ خود را بنویسید..." required style="margin-bottom:8px;"></textarea>
+                        <label class="raha-field__label" for="ticket-reply-<?php echo esc_attr($t->ID); ?>">پاسخ به تیکت <?php echo esc_html($t->post_title); ?></label>
+                        <textarea id="ticket-reply-<?php echo esc_attr($t->ID); ?>" name="ticket_reply" class="raha-field__input" rows="2" placeholder="پاسخ خود را بنویسید..." required style="margin-bottom:8px;"></textarea>
                         <button type="submit" class="raha-btn raha-btn--ghost" style="font-size:12px; min-height:36px; padding:0 16px;">ارسال پاسخ</button>
                     </form>
                 </div>

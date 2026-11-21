@@ -88,14 +88,8 @@ while (have_posts()) : the_post();
                 title="پیش‌نمایش زنده <?php echo esc_attr(get_the_title()); ?>"
                 loading="lazy"
                 style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                sandbox="allow-scripts allow-forms"
               ></iframe>
-            </div>
-            <div style="padding:12px;text-align:center;background:#fff;border-top:2px dashed rgba(20,17,15,.15);">
-              <a href="<?php echo esc_url($demo_src); ?>" target="_blank" rel="noopener"
-                 class="btn btn-secondary" style="display:inline-flex;width:auto;min-width:200px;">
-                🔗 باز کردن دمو در تب جدید
-              </a>
             </div>
           </div>
         </section>
@@ -251,7 +245,7 @@ while (have_posts()) : the_post();
             <?php endif; ?>
 
             <a href="<?php echo esc_url(home_url('/#contact')); ?>" class="btn btn-primary">درخواست این قالب</a>
-            <?php if ($demo_url) : ?>
+            <?php if ($demo_url && (!$demo_src || $demo_url !== $demo_src)) : ?>
               <a href="<?php echo esc_url($demo_url); ?>" target="_blank" rel="noopener" class="btn btn-secondary">
                 مشاهده دمو زنده
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">

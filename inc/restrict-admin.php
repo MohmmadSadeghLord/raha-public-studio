@@ -20,8 +20,8 @@ add_action('admin_init', function () {
     // Not logged in? Let WordPress handle the auth redirect to wp-login
     if (!is_user_logged_in()) return;
 
-    // Admins (and anyone with manage_options) can pass
-    if (current_user_can('manage_options')) return;
+    // Studio staff can reach the pages permitted by their role.
+    if (Raha_RBAC::can_cap('raha_access_studio')) return;
 
     // Everyone else gets redirected to the account page
     $redirect_url = function_exists('raha_page_url') 
@@ -37,7 +37,7 @@ add_action('admin_init', function () {
  */
 add_filter('show_admin_bar', function ($show) {
     if (!is_user_logged_in()) return $show;
-    if (!current_user_can('manage_options')) {
+    if (!Raha_RBAC::can_cap('raha_access_studio')) {
         return false;
     }
     return $show;
@@ -47,6 +47,9 @@ add_filter('show_admin_bar', function ($show) {
  * 3. Redirect non-admin users after standard wp-login.php login
  */
 add_filter('login_redirect', function ($redirect_to, $requested_redirect_to, $user) {
+    if (!is_wp_error($user) && user_can($user, 'raha_access_studio')) {
+        return admin_url('admin.php?page=raha-dashboard');
+    }
     if (!is_wp_error($user) && !user_can($user, 'manage_options')) {
         return function_exists('raha_page_url') 
             ? raha_page_url('account') 

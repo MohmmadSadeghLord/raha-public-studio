@@ -12,7 +12,7 @@ class Raha_Admin_Shell {
         add_menu_page(
             'پنل مدیریت استودیو',
             'استودیو رها',
-            'manage_options',
+            'raha_access_studio',
             'raha-dashboard',
             [__CLASS__, 'render_app'],
             'dashicons-chart-area',
@@ -60,36 +60,47 @@ class Raha_Admin_Shell {
             'homeUrl' => home_url('/'),
             'adminUrl'=> admin_url(),
             'roles'   => wp_get_current_user()->roles,
-            'userName'=> wp_get_current_user()->display_name
+            'userName'=> wp_get_current_user()->display_name,
+            'permissions' => [
+                'dashboard' => Raha_Admin_API::can_manage_orders(),
+                'orders' => Raha_Admin_API::can_manage_orders(),
+                'invoices' => Raha_Admin_API::can_view_invoices(),
+                'tickets' => Raha_Admin_API::can_manage_tickets(),
+                'audit-logs' => Raha_Admin_API::check_permission(),
+                'settings' => Raha_Admin_API::check_permission(),
+                'tools' => Raha_Admin_API::check_permission(),
+                'impersonate' => Raha_Admin_API::check_permission(),
+            ],
         ]);
     }
 
     public static function render_app() {
-        if (!current_user_can('manage_options')) {
+        if (!Raha_RBAC::can_cap('raha_access_studio')) {
             wp_die('شما دسترسی به این بخش ندارید.');
         }
         ?>
         <a href="#raha-view-container" class="raha-skip-link">پرش به محتوا</a>
         <div id="raha-admin-app" dir="rtl" data-theme="light">
-            <aside class="raha-sidebar">
+            <button type="button" class="raha-sidebar-overlay" id="raha-sidebar-overlay" aria-label="بستن منوی مدیریت" hidden></button>
+            <aside class="raha-sidebar" id="raha-sidebar">
                 <div class="raha-sidebar-header">
                     <div class="raha-logo">رها</div>
                     <span class="raha-badge-pro">پنل مدیریت</span>
                 </div>
-                <nav class="raha-nav">
-                    <a href="#dashboard" class="raha-nav-item active" data-route="dashboard">
+                <nav class="raha-nav" aria-label="بخش‌های مدیریت">
+                    <?php if (Raha_Admin_API::can_manage_orders()) : ?><a href="#dashboard" class="raha-nav-item active" data-route="dashboard">
                         <svg class="raha-icon" aria-hidden="true"><use href="#icon-home"></use></svg> داشبورد
-                    </a>
-                    <a href="#orders" class="raha-nav-item" data-route="orders">
+                    </a><?php endif; ?>
+                    <?php if (Raha_Admin_API::can_manage_orders()) : ?><a href="#orders" class="raha-nav-item" data-route="orders">
                         <svg class="raha-icon" aria-hidden="true"><use href="#icon-shopping-bag"></use></svg> سفارش‌ها
-                    </a>
-                    <a href="#invoices" class="raha-nav-item" data-route="invoices">
+                    </a><?php endif; ?>
+                    <?php if (Raha_Admin_API::can_view_invoices()) : ?><a href="#invoices" class="raha-nav-item" data-route="invoices">
                         <svg class="raha-icon" aria-hidden="true"><use href="#icon-credit-card"></use></svg> مالی و فاکتورها
-                    </a>
-                    <a href="#tickets" class="raha-nav-item" data-route="tickets">
+                    </a><?php endif; ?>
+                    <?php if (Raha_Admin_API::can_manage_tickets()) : ?><a href="#tickets" class="raha-nav-item" data-route="tickets">
                         <svg class="raha-icon" aria-hidden="true"><use href="#icon-message-circle"></use></svg> پشتیبانی
-                    </a>
-                    <a href="#audit-logs" class="raha-nav-item" data-route="audit-logs">
+                    </a><?php endif; ?>
+                    <?php if (Raha_Admin_API::check_permission()) : ?><a href="#audit-logs" class="raha-nav-item" data-route="audit-logs">
                         <svg class="raha-icon" aria-hidden="true"><use href="#icon-shield-check"></use></svg> لاگ امنیتی
                     </a>
                     <a href="#settings" class="raha-nav-item" data-route="settings">
@@ -98,25 +109,25 @@ class Raha_Admin_Shell {
                     <!-- لینک جدید آزمایشگاه کامپوننت‌ها -->
                     <a href="#tools" class="raha-nav-item" data-route="tools">
                         <svg class="raha-icon" aria-hidden="true"><use href="#icon-columns"></use></svg> آزمایشگاه کامپوننت‌ها
-                    </a>
+                    </a><?php endif; ?>
                 </nav>
             </aside>
 
             <main class="raha-main">
                 <header class="raha-topbar">
-                    <button class="raha-mobile-toggle" aria-label="منو">
+                    <button type="button" class="raha-mobile-toggle" aria-label="باز کردن منوی مدیریت" aria-controls="raha-sidebar" aria-expanded="false">
                         <svg class="raha-icon" aria-hidden="true"><use href="#icon-menu"></use></svg>
                     </button>
                     <div class="raha-breadcrumb" id="raha-breadcrumb">داشبورد</div>
                     <div class="raha-topbar-actions">
-                        <button class="raha-icon-btn" id="raha-search-trigger" aria-label="جستجو (Ctrl+K)">
+                        <button type="button" class="raha-icon-btn" id="raha-search-trigger" aria-label="جستجوی بخش‌های پنل (Ctrl+K)" aria-haspopup="dialog" aria-controls="raha-palette-overlay">
                             <svg class="raha-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
                             <span class="raha-shortcut">Ctrl+K</span>
                         </button>
-                        <button class="raha-icon-btn" aria-label="اعلان‌ها">
+                        <?php if (Raha_Admin_API::can_manage_orders() || Raha_Admin_API::can_manage_tickets()) : ?><button type="button" class="raha-icon-btn" id="raha-notifications-trigger" aria-label="نمایش سفارش‌ها و تیکت‌ها">
                             <svg class="raha-icon" aria-hidden="true"><use href="#icon-bell"></use></svg>
                             <span class="raha-dot"></span>
-                        </button>
+                        </button><?php endif; ?>
                         <button class="raha-icon-btn" id="raha-theme-toggle" aria-label="حالت تاریک">
                             <svg class="raha-icon" aria-hidden="true"><use href="#icon-moon"></use></svg>
                         </button>
@@ -132,7 +143,7 @@ class Raha_Admin_Shell {
             </main>
 
             <div class="raha-drawer-overlay" id="raha-drawer-overlay"></div>
-            <aside class="raha-drawer" id="raha-drawer">
+            <aside class="raha-drawer" id="raha-drawer" role="dialog" aria-modal="true" aria-labelledby="raha-drawer-title">
                 <div class="raha-drawer-header">
                     <h3 id="raha-drawer-title">جزئیات</h3>
                     <button class="raha-icon-btn" id="raha-drawer-close" aria-label="بستن">
@@ -142,11 +153,11 @@ class Raha_Admin_Shell {
                 <div class="raha-drawer-body" id="raha-drawer-content"></div>
             </aside>
 
-            <div class="raha-palette-overlay" id="raha-palette-overlay">
+            <div class="raha-palette-overlay" id="raha-palette-overlay" role="dialog" aria-modal="true" aria-label="جستجوی بخش‌های پنل">
                 <div class="raha-palette">
                     <div class="raha-palette-input-wrapper">
                         <svg class="raha-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
-                        <input type="text" id="raha-palette-input" placeholder="جستجوی سریع سفارش، مشتری یا صفحه..." autocomplete="off">
+                        <input type="text" id="raha-palette-input" aria-label="جستجوی بخش‌های پنل" placeholder="نام بخش را بنویسید..." autocomplete="off">
                     </div>
                     <ul class="raha-palette-results" id="raha-palette-results"></ul>
                 </div>

@@ -216,7 +216,7 @@ function raha_get_children($parent_id, $items) {
 
 <!-- منوی موبایل -->
 <div class="drawer-overlay" id="drawerOverlay"></div>
-<aside class="drawer" id="mobileDrawer" role="dialog" aria-label="منوی موبایل">
+<aside class="drawer" id="mobileDrawer" role="dialog" aria-modal="true" aria-label="منوی موبایل">
   <div class="drawer__header">
     <a href="<?php echo esc_url(home_url('/')); ?>" class="drawer__logo"><?php bloginfo('name'); ?></a>
     <button class="drawer__close" type="button" id="mobileMenuClose" aria-label="بستن منو">

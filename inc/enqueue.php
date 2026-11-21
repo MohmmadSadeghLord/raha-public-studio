@@ -184,40 +184,16 @@ add_action('wp_enqueue_scripts', function () {
         wp_enqueue_style('raha-search', RAHA_URI . '/assets/css/search.css', ['raha-base'], RAHA_VERSION);
         wp_enqueue_script('raha-search-js', RAHA_URI . '/assets/js/search.js', ['raha-front'], RAHA_VERSION, true);
 
-        $search_posts = get_posts([
-            'post_type'      => 'post',
-            'posts_per_page' => 200,
-            'post_status'    => 'publish',
-        ]);
-
-        $data_posts = [];
-        foreach ($search_posts as $p) {
-            $cats = get_the_category($p->ID);
-            $cat_name = !empty($cats) ? $cats[0]->name : 'عمومی';
-
-            $data_posts[] = [
-                'id'    => $p->ID,
-                'title' => $p->post_title,
-                'desc'  => wp_strip_all_tags(get_the_excerpt($p->ID)),
-                'tag'   => $cat_name,
-                'date'  => get_the_date('', $p->ID),
-                'ts'    => get_post_time('U', true, $p->ID),
-                'icon'  => 'book',
-                'url'   => get_permalink($p->ID),
-                'thumb' => get_the_post_thumbnail_url($p->ID, 'medium'),
-            ];
-        }
-
-        $categories = get_categories(['hide_empty' => false]);
-        $data_cats  = ['all' => 'همه'];
-
+        $categories = get_categories(['hide_empty' => true]);
+        $data_cats = [];
         foreach ($categories as $cat) {
-            $data_cats[$cat->name] = $cat->name;
+            $data_cats[] = ['slug' => $cat->slug, 'name' => $cat->name, 'count' => (int) $cat->count];
         }
 
         wp_localize_script('raha-search-js', 'RahaSearchData', [
-            'posts' => $data_posts,
-            'cats'  => $data_cats,
+            'endpoint' => esc_url_raw(rest_url('raha/v1/search')),
+            'cats'     => $data_cats,
+            'total'    => (int) (wp_count_posts('post')->publish ?? 0),
         ]);
     }
 

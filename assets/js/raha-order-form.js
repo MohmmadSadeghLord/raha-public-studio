@@ -57,24 +57,24 @@
 
     function optCard(group, value, icon, label) {
         var sel = state[group] === value;
-        return '<div class="raha-opt' + (sel ? ' is-sel' : '') + '" data-group="' + group + '" data-value="' + value + '">' +
+        return '<button type="button" class="raha-opt' + (sel ? ' is-sel' : '') + '" data-group="' + group + '" data-value="' + value + '" aria-pressed="' + sel + '">' +
             '<span class="raha-opt__icon">' + icon + '</span>' +
             '<span class="raha-opt__label">' + label + '</span>' +
-            '</div>';
+            '</button>';
     }
     function optMulti(group, value, icon, label) {
         var sel = state[group].indexOf(value) > -1;
-        return '<div class="raha-opt' + (sel ? ' is-sel' : '') + '" data-group="' + group + '" data-value="' + value + '" data-multi="1">' +
+        return '<button type="button" class="raha-opt' + (sel ? ' is-sel' : '') + '" data-group="' + group + '" data-value="' + value + '" data-multi="1" aria-pressed="' + sel + '">' +
             '<span class="raha-opt__icon">' + (sel ? '✅' : icon) + '</span>' +
             '<span class="raha-opt__label">' + label + '</span>' +
-            '</div>';
+            '</button>';
     }
     function optToggle(group, icon, label) {
         var sel = !!state[group];
-        return '<div class="raha-opt' + (sel ? ' is-sel' : '') + '" data-group="' + group + '" data-toggle="1">' +
+        return '<button type="button" class="raha-opt' + (sel ? ' is-sel' : '') + '" data-group="' + group + '" data-toggle="1" aria-pressed="' + sel + '">' +
             '<span class="raha-opt__icon">' + (sel ? '✅' : icon) + '</span>' +
             '<span class="raha-opt__label">' + label + '</span>' +
-            '</div>';
+            '</button>';
     }
 
     /* ---------- Steps ---------- */
@@ -131,8 +131,8 @@
             html += '<div style="margin-top:12px">';
             state.designSamples.forEach(function (link, i) {
                 html += '<div class="raha-opt-link-row" style="display:flex;gap:6px;margin-bottom:6px">' +
-                    '<input type="url" dir="ltr" class="raha-field__input" data-sample="' + i + '" value="' + esc(link) + '">' +
-                    (state.designSamples.length > 1 ? '<button type="button" class="raha-btn raha-btn--ghost" data-remove-sample="' + i + '">✕</button>' : '') +
+                    '<input type="url" dir="ltr" class="raha-field__input" aria-label="آدرس نمونه سایت ' + faNum(i + 1) + '" data-sample="' + i + '" value="' + esc(link) + '">' +
+                    (state.designSamples.length > 1 ? '<button type="button" class="raha-btn raha-btn--ghost" data-remove-sample="' + i + '" aria-label="حذف نمونه سایت ' + faNum(i + 1) + '">✕</button>' : '') +
                     '</div>';
             });
             html += '<button type="button" class="raha-btn raha-btn--ghost" data-add-sample>+ افزودن</button></div>';
@@ -140,18 +140,18 @@
         html += '<label class="raha-field" style="margin-top:16px"><span class="raha-field__label">توضیحات بصری</span>' +
             '<textarea class="raha-field__input" rows="3" data-input="designNotes">' + esc(state.designNotes) + '</textarea></label>';
         html += '<label class="raha-field"><span class="raha-field__label">فایل لوگو</span>' +
-            '<input type="file" data-file="logoFile" accept="image/*,.pdf"><small>' + (state.logoFile ? '📎 ' + esc(state.logoFile.name) : 'انتخاب کنید') + '</small></label>';
+            '<input type="file" data-file="logoFile" accept="image/jpeg,image/png,image/webp,.pdf"><small>' + (state.logoFile ? '📎 ' + esc(state.logoFile.name) : 'انتخاب کنید (تا ۵ مگابایت)') + '</small></label>';
         return html;
     }
     function stepContent() {
-        return '<label class="raha-field"><span class="raha-field__label">وضعیت محتوا</span></label>' +
+        return '<p class="raha-field__label">وضعیت محتوا</p>' +
             '<div class="raha-opt-grid">' +
             optCard('contentStatus', 'ready', '✅', 'همه آماده') +
             optCard('contentStatus', 'partial', '⏳', 'بخشی آماده') +
             optCard('contentStatus', 'need-help', '🤝', 'کمک می‌خواهم') +
             optCard('contentStatus', 'unsure', '❓', 'مشخص نیست') +
             '</div>' +
-            '<label class="raha-field" style="margin-top:16px"><span class="raha-field__label">دامنه و هاست</span></label>' +
+            '<p class="raha-field__label" style="margin-top:16px">دامنه و هاست</p>' +
             '<div class="raha-opt-grid">' +
             optCard('domainHosting', 'have-both', '🌐', 'هر دو را دارم') +
             optCard('domainHosting', 'have-domain', '🔗', 'فقط دامنه') +
@@ -170,7 +170,7 @@
             html += '<label class="raha-field" style="margin-top:12px"><span class="raha-field__label">تاریخ مورد نظر</span>' +
                 '<input type="date" dir="ltr" class="raha-field__input" data-input="timelineDate" value="' + esc(state.timelineDate) + '"></label>';
         }
-        html += '<label class="raha-field" style="margin-top:16px"><span class="raha-field__label">بودجه</span></label>' +
+        html += '<p class="raha-field__label" style="margin-top:16px">بودجه</p>' +
             '<div class="raha-opt-grid">' +
             optCard('budget', 'low', '💰', 'تا ۱۰ میلیون') +
             optCard('budget', 'mid', '💰💰', '۱۰ تا ۳۰ میلیون') +
@@ -184,7 +184,7 @@
         return '<label class="raha-field"><span class="raha-field__label">توضیحات تکمیلی</span>' +
             '<textarea class="raha-field__input" rows="4" data-input="extraNotes">' + esc(state.extraNotes) + '</textarea></label>' +
             '<label class="raha-field"><span class="raha-field__label">فایل شرح پروژه</span>' +
-            '<input type="file" data-file="extraFile"><small>' + (state.extraFile ? '📎 ' + esc(state.extraFile.name) : 'انتخاب کنید') + '</small></label>';
+            '<input type="file" data-file="extraFile" accept="image/jpeg,image/png,image/webp,.pdf"><small>' + (state.extraFile ? '📎 ' + esc(state.extraFile.name) : 'انتخاب کنید (تا ۵ مگابایت)') + '</small></label>';
     }
     function stepContact() {
         var cfgM = state.contactMethod ? CONTACT_METHODS[state.contactMethod] : null;
@@ -192,7 +192,7 @@
             '<input type="text" class="raha-field__input" data-input="fullName" value="' + esc(state.fullName) + '"></label>' +
             '<label class="raha-field"><span class="raha-field__label">نام شرکت</span>' +
             '<input type="text" class="raha-field__input" data-input="companyName" value="' + esc(state.companyName) + '"></label>' +
-            '<label class="raha-field"><span class="raha-field__label">روش تماس *</span></label>' +
+            '<p class="raha-field__label">روش تماس *</p>' +
             '<div class="raha-opt-grid">' +
             optCard('contactMethod', 'phone', '📞', 'تلفن') +
             optCard('contactMethod', 'whatsapp', '💚', 'واتساپ') +
@@ -239,6 +239,7 @@
 
     var stepContainer = document.getElementById('stepContainer');
     var progressFill = document.getElementById('progressFill');
+    var progressTrack = document.getElementById('orderProgress');
     var stepLabel = document.getElementById('stepLabel');
     var stepPercent = document.getElementById('stepPercent');
     var backBtn = document.getElementById('backBtn');
@@ -248,15 +249,16 @@
     function render() {
         var s = STEPS[currentStep];
         stepContainer.innerHTML =
-            '<h2 class="raha-step__title">' + s.title + '</h2>' +
+            '<h2 class="raha-step__title" tabindex="-1">' + s.title + '</h2>' +
             '<p class="raha-step__subtitle">' + s.sub + '</p>' +
             s.fn();
 
         var pct = Math.round(((currentStep + 1) / totalSteps) * 100);
         progressFill.style.width = pct + '%';
+        progressTrack.setAttribute('aria-valuenow', String(pct));
         stepLabel.textContent = 'مرحله ' + faNum(currentStep + 1) + ' از ' + faNum(totalSteps);
         stepPercent.textContent = faNum(pct) + '٪';
-        backBtn.style.visibility = currentStep === 0 ? 'hidden' : 'visible';
+        backBtn.hidden = currentStep === 0;
         nextBtn.textContent = currentStep === totalSteps - 1 ? 'ثبت درخواست' : 'بعدی ←';
         errorBox.style.display = 'none';
         bindEvents();
@@ -267,6 +269,7 @@
             el.onclick = function () {
                 var group = el.dataset.group;
                 var value = el.dataset.value;
+                var selector = '[data-group="' + group + '"]' + (value ? '[data-value="' + value + '"]' : '[data-toggle="1"]');
                 if (el.dataset.multi) {
                     var i = state[group].indexOf(value);
                     if (i > -1) state[group].splice(i, 1);
@@ -279,6 +282,8 @@
                     if (group === 'contactMethod') state.contactValue = '';
                 }
                 render();
+                var selected = stepContainer.querySelector(selector);
+                if (selected) selected.focus();
             };
         });
         stepContainer.querySelectorAll('[data-input]').forEach(function (el) {
@@ -290,14 +295,17 @@
         stepContainer.querySelectorAll('[data-file]').forEach(function (el) {
             el.onchange = function () {
                 state[el.dataset.file] = el.files[0] || null;
+                var fileKey = el.dataset.file;
                 render();
+                var replacement = stepContainer.querySelector('[data-file="' + fileKey + '"]');
+                if (replacement) replacement.focus();
             };
         });
         stepContainer.querySelectorAll('[data-add-sample]').forEach(function (el) {
-            el.onclick = function () { state.designSamples.push(''); render(); };
+            el.onclick = function () { state.designSamples.push(''); render(); var added = stepContainer.querySelector('[data-sample="' + (state.designSamples.length - 1) + '"]'); if (added) added.focus(); };
         });
         stepContainer.querySelectorAll('[data-remove-sample]').forEach(function (el) {
-            el.onclick = function () { state.designSamples.splice(+el.dataset.removeSample, 1); if (!state.designSamples.length) state.designSamples = ['']; render(); };
+            el.onclick = function () { state.designSamples.splice(+el.dataset.removeSample, 1); if (!state.designSamples.length) state.designSamples = ['']; render(); var addButton = stepContainer.querySelector('[data-add-sample]'); if (addButton) addButton.focus(); };
         });
     }
 
@@ -305,6 +313,7 @@
         errorBox.textContent = '⚠️ ' + msg;
         errorBox.style.display = 'block';
         errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        errorBox.focus();
     }
 
     function validate() {
@@ -367,10 +376,11 @@
         if (currentStep === totalSteps - 1) { submit(); return; }
         currentStep++;
         render();
+        stepContainer.querySelector('.raha-step__title').focus();
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
     backBtn.onclick = function () {
-        if (currentStep > 0) { currentStep--; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+        if (currentStep > 0) { currentStep--; render(); stepContainer.querySelector('.raha-step__title').focus(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
     };
 
     render();

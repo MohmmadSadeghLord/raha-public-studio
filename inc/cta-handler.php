@@ -8,6 +8,9 @@ function raha_handle_cta_form() {
     if (!check_ajax_referer('raha_cta_nonce', 'nonce', false)) {
         wp_send_json_error(['message' => 'نشست منقضی شده است. صفحه را رفرش کنید.']);
     }
+    if (!raha_check_submission_limit('lead')) {
+        wp_send_json_error(['message' => 'تعداد درخواست‌ها بیش از حد مجاز است. لطفاً ۱۵ دقیقه دیگر تلاش کنید.'], 429);
+    }
 
     $contact = sanitize_text_field($_POST['contact'] ?? '');
 

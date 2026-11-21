@@ -2,7 +2,8 @@
 /* Template Name: تشکر */
 if (!defined('ABSPATH')) exit;
 
-$tracking = sanitize_text_field($_GET['tracking'] ?? '');
+$tracking = sanitize_text_field(wp_unslash($_GET['tracking'] ?? ''));
+$access = sanitize_text_field(wp_unslash($_GET['access'] ?? ''));
 $order    = null;
 if ($tracking) {
     $found = get_posts([
@@ -15,6 +16,25 @@ if ($tracking) {
     $order = $found[0] ?? null;
 }
 
+// The tracking code is an identifier, not proof of ownership.
+if ($order) {
+    $is_owner = is_user_logged_in() && (int) $order->post_author === get_current_user_id();
+    $is_admin = current_user_can('manage_options');
+    $stored_hash = get_post_meta($order->ID, '_raha_access_token_hash', true);
+    $has_token = is_string($stored_hash) && strlen($stored_hash) === 64
+        && preg_match('/^[a-f0-9]{64}$/D', $access)
+        && hash_equals($stored_hash, hash('sha256', $access));
+    if (!$is_owner && !$is_admin && !$has_token) $order = null;
+}
+
+nocache_headers();
+header('Referrer-Policy: no-referrer');
+add_filter('wp_robots', function ($robots) {
+    $robots['noindex'] = true;
+    $robots['nofollow'] = true;
+    return $robots;
+});
+
 get_header();
 ?>
 <div class="raha-thankyou">
@@ -23,8 +43,8 @@ get_header();
         <?php if (!$order) : ?>
             <div class="raha-thankyou__card">
                 <div class="raha-thankyou__icon">🔍</div>
-                <h1>سفارشی یافت نشد</h1>
-                <p>کد پیگیری وارد شده معتبر نیست یا سفارش حذف شده است.</p>
+                <h1>اطلاعات سفارش در دسترس نیست</h1>
+                <p>برای مشاهدهٔ جزئیات، از لینک اختصاصی دریافت‌شده یا پنل کاربری خود استفاده کنید.</p>
                 <a href="<?php echo esc_url(home_url('/')); ?>" class="raha-btn raha-btn--primary">بازگشت به خانه</a>
             </div>
         <?php else :

@@ -6,7 +6,7 @@ add_action('admin_menu', function() {
     add_menu_page(
         'پنل مدیریت سفارشات',
         'پنل سفارشات (جدید)',
-        'manage_options',
+        'raha_manage_orders',
         'raha-orders-panel',
         'raha_render_admin_orders_panel',
         'dashicons-clipboard',
@@ -16,7 +16,7 @@ add_action('admin_menu', function() {
 
 // رندر صفحه
 function raha_render_admin_orders_panel() {
-    if (!current_user_can('manage_options')) return;
+    if (!Raha_RBAC::can_cap('raha_manage_orders')) return;
 
     $orders = get_posts([
         'post_type'      => 'raha_order',
@@ -173,7 +173,7 @@ function raha_render_admin_orders_panel() {
 // ============================================================
 add_action('wp_ajax_raha_update_order_admin', 'raha_update_order_admin_handler');
 function raha_update_order_admin_handler() {
-    if (!current_user_can('manage_options')) {
+    if (!Raha_RBAC::can_cap('raha_manage_orders')) {
         wp_send_json_error(['message' => 'دسترسی غیرمجاز.']);
     }
     
@@ -182,19 +182,24 @@ function raha_update_order_admin_handler() {
     }
 
     $order_id = absint($_POST['order_id'] ?? 0);
-    if (!$order_id || get_post_type($order_id) !== 'raha_order') {
+    if (!$order_id || get_post_type($order_id) !== 'raha_order' || get_post_status($order_id) !== 'publish') {
         wp_send_json_error(['message' => 'سفارش نامعتبر است.']);
     }
 
-    $status = sanitize_text_field($_POST['status'] ?? '');
-    $amount = (int) ($_POST['amount'] ?? 0);
-    $amount_paid = (int) ($_POST['amount_paid'] ?? 0);
-    $admin_notes = sanitize_textarea_field($_POST['admin_notes'] ?? '');
+    $status = sanitize_text_field(wp_unslash($_POST['status'] ?? ''));
+    $amount = wp_unslash($_POST['amount'] ?? '');
+    $amount_paid = wp_unslash($_POST['amount_paid'] ?? '');
+    $validated = raha_validate_order_update($status, $amount, $amount_paid);
+    if (is_wp_error($validated)) {
+        wp_send_json_error(['message' => $validated->get_error_message()], 400);
+    }
+    $admin_notes = sanitize_textarea_field(wp_unslash($_POST['admin_notes'] ?? ''));
 
     update_post_meta($order_id, 'order_status', $status);
-    update_post_meta($order_id, 'amount', $amount);
-    update_post_meta($order_id, 'amount_paid', $amount_paid);
+    update_post_meta($order_id, 'amount', $validated[0]);
+    update_post_meta($order_id, 'amount_paid', $validated[1]);
     update_post_meta($order_id, 'admin_notes', $admin_notes);
+    delete_transient('raha_dashboard_stats');
 
     wp_send_json_success(['message' => 'تغییرات با موفقیت ذخیره شد.']);
 }

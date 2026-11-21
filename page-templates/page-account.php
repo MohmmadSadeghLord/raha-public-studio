@@ -24,7 +24,7 @@ get_header();
                 </div>
             </div>
 
-            <nav class="raha-panel__nav">
+            <nav class="raha-panel__nav" aria-label="بخش‌های حساب کاربری">
                 <?php
                 $items = [
                     'dashboard' => ['داشبورد', '🏠'],
@@ -35,7 +35,7 @@ get_header();
                 ];
                 foreach ($items as $key => $item) : ?>
                     <a href="<?php echo esc_url(add_query_arg('tab', $key, raha_page_url('account'))); ?>"
-                       class="<?php echo $tab === $key ? 'is-active' : ''; ?>">
+                       class="<?php echo $tab === $key ? 'is-active' : ''; ?>"<?php echo $tab === $key ? ' aria-current="page"' : ''; ?>>
                         <span><?php echo $item[1]; ?></span><?php echo esc_html($item[0]); ?>
                     </a>
                 <?php endforeach; ?>
@@ -44,7 +44,7 @@ get_header();
             <a href="<?php echo esc_url(wp_logout_url(home_url('/'))); ?>" class="raha-panel__logout">خروج از حساب</a>
         </aside>
 
-        <main class="raha-panel__main">
+        <section class="raha-panel__main" aria-label="محتوای حساب کاربری">
             <?php
             switch ($tab) {
                 case 'orders':    get_template_part('parts/account/tab', 'orders');    break;
@@ -54,7 +54,7 @@ get_header();
                 default:          get_template_part('parts/account/tab', 'dashboard');
             }
             ?>
-        </main>
+        </section>
 
     </div>
 </div>

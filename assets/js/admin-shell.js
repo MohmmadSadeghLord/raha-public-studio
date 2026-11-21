@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', () => {
        ============================================================ */
     const toFa = (num) => String(num).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
     const formatMoney = (num) => toFa(Number(num).toLocaleString('en-US')) + ' تومان';
+    const escapeHtml = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[char]);
 
     /* ============================================================
        1.5. Toast System — Global API (NEW)
@@ -176,11 +179,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const navItems = document.querySelectorAll('.raha-nav-item');
     const viewContainer = document.getElementById('raha-view-container');
     const breadcrumb = document.getElementById('raha-breadcrumb');
+    const sidebar = document.getElementById('raha-sidebar');
+    const sidebarOverlay = document.getElementById('raha-sidebar-overlay');
+    const mobileToggle = document.querySelector('.raha-mobile-toggle');
+    function closeMobileNav(restoreFocus = false) {
+        sidebar.classList.remove('active');
+        sidebarOverlay.hidden = true;
+        mobileToggle.setAttribute('aria-expanded', 'false');
+        if (restoreFocus) mobileToggle.focus();
+    }
+    mobileToggle.addEventListener('click', () => {
+        if (sidebar.classList.contains('active')) { closeMobileNav(true); return; }
+        sidebar.classList.add('active');
+        sidebarOverlay.hidden = false;
+        mobileToggle.setAttribute('aria-expanded', 'true');
+        const first = sidebar.querySelector('.raha-nav-item');
+        if (first) first.focus();
+    });
+    sidebarOverlay.addEventListener('click', () => closeMobileNav(true));
+    window.addEventListener('resize', () => { if (window.innerWidth > 960) closeMobileNav(); });
+    const permissions = config.permissions || {};
+    const firstRoute = Object.keys(permissions).find(route => permissions[route] && route !== 'impersonate') || 'dashboard';
 
     async function navigateTo(route, pushState = true) {
+        if (!permissions[route] || route === 'impersonate') route = firstRoute;
         navItems.forEach(item => {
             item.classList.toggle('active', item.dataset.route === route);
+            if (item.dataset.route === route) item.setAttribute('aria-current', 'page');
+            else item.removeAttribute('aria-current');
         });
+        closeMobileNav();
+        if (pushState) viewContainer.focus();
 
         const activeMenu = document.querySelector(`.raha-nav-item[data-route="${route}"]`);
         if (activeMenu) breadcrumb.textContent = activeMenu.textContent.trim();
@@ -218,6 +247,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="raha-stat-card">
                     <div class="raha-stat-icon" style="background:#e0f2fe;">📦</div>
                     <div class="raha-stat-info"><span>کل سفارشات</span><strong>${toFa(data.stats.total_orders)}</strong></div>
+                </div>
+                <div class="raha-stat-card">
+                    <div class="raha-stat-icon" style="background:#fce7f3;">⏳</div>
+                    <div class="raha-stat-info"><span>سفارش‌های در انتظار</span><strong>${toFa(data.stats.pending_orders)}</strong></div>
                 </div>
                 <div class="raha-stat-card">
                     <div class="raha-stat-icon" style="background:#dcfce7;">💰</div>
@@ -620,10 +653,10 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="raha-card" style="padding: 32px; max-width: 800px;">
                 <form id="raha-settings-form">
                     <div class="raha-form-grid">
-                        <div class="raha-field"><label>نام استودیو</label><input type="text" name="studio_name" class="raha-input" value="${data.studio_name}"></div>
-                        <div class="raha-field"><label>ایمیل پشتیبانی</label><input type="email" name="support_email" class="raha-input" dir="ltr" value="${data.support_email}"></div>
-                        <div class="raha-field"><label>شماره تماس پشتیبانی</label><input type="text" name="support_phone" class="raha-input" dir="ltr" value="${data.support_phone}"></div>
-                        <div class="raha-field"><label>مرچنت کد درگاه پرداخت</label><input type="text" name="gateway_key" class="raha-input" dir="ltr" value="${data.gateway_key}"></div>
+                        <div class="raha-field"><label for="raha-studio-name">نام استودیو</label><input id="raha-studio-name" type="text" name="studio_name" class="raha-input" value="${escapeHtml(data.studio_name)}"></div>
+                        <div class="raha-field"><label for="raha-support-email">ایمیل پشتیبانی</label><input id="raha-support-email" type="email" name="support_email" class="raha-input" dir="ltr" value="${escapeHtml(data.support_email)}"></div>
+                        <div class="raha-field"><label for="raha-support-phone">شماره تماس پشتیبانی</label><input id="raha-support-phone" type="text" name="support_phone" class="raha-input" dir="ltr" value="${escapeHtml(data.support_phone)}"></div>
+                        <div class="raha-field"><label for="raha-gateway-key">مرچنت کد درگاه پرداخت</label><input id="raha-gateway-key" type="text" name="gateway_key" class="raha-input" dir="ltr" value="${escapeHtml(data.gateway_key)}"></div>
                     </div>
                     <button type="submit" class="raha-btn raha-btn-primary" style="margin-top:24px; width: 200px;">ذخیره تنظیمات</button>
                 </form>
@@ -1307,21 +1340,41 @@ document.addEventListener('DOMContentLoaded', () => {
     const drawerClose = document.getElementById('raha-drawer-close');
     const drawerTitle = document.getElementById('raha-drawer-title');
     const drawerContent = document.getElementById('raha-drawer-content');
+    let drawerReturnFocus = null;
 
     function openRahaDrawer(title, contentHTML) {
+        drawerReturnFocus = document.activeElement;
         drawerTitle.textContent = title;
         drawerContent.innerHTML = contentHTML;
         drawer.classList.add('active');
         drawerOverlay.classList.add('active');
+        drawerClose.focus();
     }
 
     function closeDrawer() {
         drawer.classList.remove('active');
         drawerOverlay.classList.remove('active');
+        if (drawerReturnFocus && document.contains(drawerReturnFocus)) drawerReturnFocus.focus();
+        drawerReturnFocus = null;
     }
 
     drawerClose.addEventListener('click', closeDrawer);
     drawerOverlay.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            if (drawer.classList.contains('active')) closeDrawer();
+            else if (sidebar.classList.contains('active')) closeMobileNav(true);
+        }
+        if (event.key !== 'Tab') return;
+        const activePanel = drawer.classList.contains('active') ? drawer : sidebar.classList.contains('active') ? sidebar : null;
+        if (!activePanel) return;
+        const focusable = Array.from(activePanel.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled])'));
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
 
     function openOrderDrawer(order) {
         openRahaDrawer('سفارش ' + order.code, `
@@ -1337,16 +1390,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 <label style="font-size:13px; font-weight:800; display:block; margin-bottom:8px;">تغییر وضعیت سفارش</label>
                 <select class="raha-input" id="drawer-order-status">
                     <option value="new" ${order.status === 'new' ? 'selected' : ''}>جدید</option>
+                    <option value="review" ${order.status === 'review' ? 'selected' : ''}>در حال بررسی</option>
                     <option value="progress" ${order.status === 'progress' ? 'selected' : ''}>در حال انجام</option>
                     <option value="done" ${order.status === 'done' ? 'selected' : ''}>تکمیل شده</option>
+                    <option value="canceled" ${order.status === 'canceled' ? 'selected' : ''}>لغو شده</option>
                 </select>
             </div>
             <button class="raha-btn raha-btn-primary" id="save-order-status-btn" style="margin-top:20px; width:100%;">
                 ذخیره تغییرات
             </button>
-            <button class="raha-btn" id="impersonate-btn" style="margin-top:10px; width:100%; background:#f59e0b; color:#fff; border-color:#b45309;">
+            ${permissions.impersonate && order.user_id ? `<button class="raha-btn" id="impersonate-btn" style="margin-top:10px; width:100%; background:#f59e0b; color:#fff; border-color:#b45309;">
                 ورود به پنل این مشتری (Impersonate)
-            </button>
+            </button>` : ''}
         `);
 
         // اتصال دکمه ذخیره به REST API
@@ -1379,8 +1434,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // دکمه Impersonate
-        document.getElementById('impersonate-btn').addEventListener('click', async () => {
-            const customerId = 1;
+        const impersonateBtn = document.getElementById('impersonate-btn');
+        if (impersonateBtn) impersonateBtn.addEventListener('click', async () => {
+            const customerId = order.user_id;
             const btn = document.getElementById('impersonate-btn');
             btn.disabled = true;
             btn.textContent = 'در حال تولید لینک...';
@@ -1415,16 +1471,46 @@ document.addEventListener('DOMContentLoaded', () => {
         `);
     }
 
-    function openTicketDrawer(id) {
+    async function openTicketDrawer(id) {
+        const ticket = await apiFetch('tickets/' + encodeURIComponent(id));
+        if (!ticket) return;
+        const replies = ticket.replies.map(reply => `
+            <div class="raha-detail-item" style="white-space:pre-wrap;margin-top:12px;">
+                <strong>${escapeHtml(reply.author)}</strong><p>${escapeHtml(reply.message)}</p>
+            </div>`).join('');
         openRahaDrawer('پاسخ به تیکت #' + id, `
+            <div class="raha-detail-item"><strong>${escapeHtml(ticket.subject)}</strong>
+                <p style="white-space:pre-wrap;">${escapeHtml(ticket.message)}</p></div>
+            ${replies}
             <div style="margin-bottom:20px;">
-                <label style="font-size:13px; font-weight:800; display:block; margin-bottom:8px;">متن پاسخ</label>
-                <textarea class="raha-input" rows="5" placeholder="پاسخ خود را بنویسید..." style="width:100%;"></textarea>
+                <label for="ticket-reply-text" style="font-size:13px; font-weight:800; display:block; margin-bottom:8px;">متن پاسخ</label>
+                <textarea class="raha-input" id="ticket-reply-text" rows="5" placeholder="پاسخ خود را بنویسید..." style="width:100%;"></textarea>
             </div>
-            <button class="raha-btn raha-btn-primary" style="width:100%;" onclick="window.showRahaToast('پاسخ ارسال شد (دمو)', 'success'); document.getElementById('raha-drawer-close').click();">
+            <button class="raha-btn raha-btn-primary" id="ticket-reply-submit" style="width:100%;">
                 ارسال پاسخ
             </button>
         `);
+        document.getElementById('ticket-reply-submit').addEventListener('click', async (event) => {
+            const button = event.currentTarget;
+            const message = document.getElementById('ticket-reply-text').value.trim();
+            if (!message) { window.showRahaToast('متن پاسخ را وارد کنید', 'error'); return; }
+            button.disabled = true;
+            try {
+                const response = await fetch(config.restUrl + 'tickets/reply', {
+                    method: 'POST',
+                    headers: { 'X-WP-Nonce': config.nonce, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticket_id: ticket.id, message })
+                });
+                if (!response.ok) throw new Error('Reply failed');
+                window.showRahaToast('پاسخ ذخیره شد', 'success');
+                closeDrawer();
+                loadTicketsView();
+            } catch (error) {
+                window.showRahaToast('پاسخ ذخیره نشد', 'error');
+            } finally {
+                button.disabled = false;
+            }
+        });
     }
 
     window.showAuditDiff = function(id, beforeB64, afterB64) {
@@ -1491,6 +1577,77 @@ document.addEventListener('DOMContentLoaded', () => {
     /* ============================================================
        13. Init (راه‌اندازی اولیه)
        ============================================================ */
+    const paletteOverlay = document.getElementById('raha-palette-overlay');
+    const paletteInput = document.getElementById('raha-palette-input');
+    const paletteResults = document.getElementById('raha-palette-results');
+    const searchTrigger = document.getElementById('raha-search-trigger');
+    const notificationsTrigger = document.getElementById('raha-notifications-trigger');
+    let paletteReturnFocus = null;
+    let paletteNotificationOnly = false;
+
+    function renderPalette() {
+        const query = paletteInput.value.trim().toLocaleLowerCase();
+        const matches = Array.from(navItems).filter(item =>
+            (!paletteNotificationOnly || ['orders', 'tickets'].includes(item.dataset.route))
+            && item.textContent.trim().toLocaleLowerCase().includes(query)
+        );
+        paletteResults.innerHTML = matches.length
+            ? matches.map(item => `<li><button type="button" data-route="${escapeHtml(item.dataset.route)}">${escapeHtml(item.textContent.trim())}</button></li>`).join('')
+            : '<li role="status" style="padding:12px;">بخشی پیدا نشد.</li>';
+    }
+
+    function closePalette() {
+        if (!paletteOverlay.classList.contains('active')) return;
+        paletteOverlay.classList.remove('active');
+        if (paletteReturnFocus && document.contains(paletteReturnFocus)) paletteReturnFocus.focus();
+        paletteReturnFocus = null;
+    }
+
+    function openPalette(notificationOnly = false) {
+        if (paletteOverlay.classList.contains('active')) return;
+        closeMobileNav();
+        if (drawer.classList.contains('active')) closeDrawer();
+        paletteReturnFocus = document.activeElement === document.body
+            ? (notificationOnly ? notificationsTrigger : searchTrigger)
+            : document.activeElement;
+        paletteNotificationOnly = notificationOnly;
+        paletteOverlay.setAttribute('aria-label', notificationOnly ? 'بخش‌های دارای اعلان' : 'جستجوی بخش‌های پنل');
+        paletteInput.placeholder = notificationOnly ? 'سفارش‌ها یا پشتیبانی...' : 'نام بخش را بنویسید...';
+        paletteInput.value = '';
+        renderPalette();
+        paletteOverlay.classList.add('active');
+        paletteInput.focus();
+    }
+
+    searchTrigger.addEventListener('click', () => openPalette());
+    if (notificationsTrigger) notificationsTrigger.addEventListener('click', () => openPalette(true));
+    paletteInput.addEventListener('input', renderPalette);
+    paletteInput.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            const first = paletteResults.querySelector('button[data-route]');
+            if (first) { event.preventDefault(); first.click(); }
+        }
+    });
+    paletteResults.addEventListener('click', event => {
+        const button = event.target.closest('button[data-route]');
+        if (!button) return;
+        const route = button.dataset.route;
+        closePalette();
+        navigateTo(route);
+    });
+    paletteOverlay.addEventListener('click', event => { if (event.target === paletteOverlay) closePalette(); });
+    document.addEventListener('keydown', event => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); openPalette(); return; }
+        if (!paletteOverlay.classList.contains('active')) return;
+        if (event.key === 'Escape') { event.preventDefault(); closePalette(); return; }
+        if (event.key !== 'Tab') return;
+        const items = [paletteInput].concat(Array.from(paletteResults.querySelectorAll('button[data-route]')));
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
+
     navItems.forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();

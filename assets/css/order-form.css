@@ -29,6 +29,7 @@
 
 .raha-opt {
     display: flex; align-items: center; gap: 10px;
+    width: 100%; text-align: start; font: inherit; color: inherit;
     padding: 12px 14px;
     background: var(--surface); border: 2px solid var(--ink); border-radius: var(--r);
     box-shadow: 2px 2px 0 var(--ink);
@@ -37,18 +38,20 @@
 }
 .raha-opt:hover { transform: translate(-2px, -2px); box-shadow: var(--sh-1); }
 .raha-opt.is-sel { background: var(--sun); }
+.raha-opt:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 .raha-opt__icon { font-size: 18px; flex-shrink: 0; }
 .raha-opt__label { font-size: 12.5px; font-weight: 700; }
 
 .raha-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
 .raha-field__label { font-size: 12px; font-weight: 800; color: var(--ink-soft); }
 .raha-field__input {
-    width: 100%; padding: 10px 12px;
+    width: 100%; min-width: 0; padding: 10px 12px;
     font-family: inherit; font-size: 13px; color: var(--ink);
     background: var(--surface); border: 2px solid var(--ink); border-radius: var(--r);
     transition: box-shadow var(--t), transform var(--t);
 }
 .raha-field__input:focus { outline: none; box-shadow: var(--sh-1); transform: translate(-1px, -1px); }
+.raha-field__input:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 .raha-field small { font-size: 11px; color: var(--muted); }
 .raha-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
@@ -61,7 +64,7 @@
 .raha-review span { color: var(--ink-soft); text-align: left; }
 
 .raha-order-nav { display: flex; gap: 10px; justify-content: space-between; margin-top: 16px; }
-
+.raha-order-nav > button[hidden] { display: none; }
 .raha-order-error {
     display: none; margin-top: 16px; padding: 10px 14px;
     background: #fee2e2; color: #7f1d1d;
@@ -137,3 +140,10 @@
 .raha-thankyou__summary span { display: block; font-size: 10.5px; font-weight: 800; color: var(--muted); }
 .raha-thankyou__summary strong { font-size: 12.5px; font-weight: 900; }
 .raha-thankyou__actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 20px; border-top: 2px dashed rgba(20,17,15,.15); }
+@media (max-width: 480px) {
+    .raha-order-nav > button { flex: 1; min-width: 0; }
+    .raha-opt-link-row > input { min-width: 0; }
+    .raha-review { flex-wrap: wrap; }
+    .raha-review span, .raha-thankyou__tracking strong { overflow-wrap: anywhere; }
+    .raha-auth__card, .raha-thankyou__card { padding: 18px; }
+}

@@ -12,35 +12,45 @@ class Raha_Admin_API {
         register_rest_route('raha/v1', '/dashboard', [
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [__CLASS__, 'get_dashboard_data'],
-            'permission_callback' => [__CLASS__, 'check_permission'],
+            'permission_callback' => [__CLASS__, 'can_manage_orders'],
         ]);
 
         // مسیر سفارش‌ها
         register_rest_route('raha/v1', '/orders', [
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [__CLASS__, 'get_orders_data'],
-            'permission_callback' => [__CLASS__, 'check_permission'],
+            'permission_callback' => [__CLASS__, 'can_manage_orders'],
         ]);
 
         // مسیر تغییر وضعیت سفارش
         register_rest_route('raha/v1', '/orders/update-status', [
             'methods'             => WP_REST_Server::CREATABLE, // POST
             'callback'            => [__CLASS__, 'update_order_status'],
-            'permission_callback' => [__CLASS__, 'check_permission'],
+            'permission_callback' => [__CLASS__, 'can_manage_orders'],
         ]);
 
         // مسیر فاکتورها
         register_rest_route('raha/v1', '/invoices', [
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [__CLASS__, 'get_invoices_data'],
-            'permission_callback' => [__CLASS__, 'check_permission'],
+            'permission_callback' => [__CLASS__, 'can_view_invoices'],
         ]);
 
         // مسیر تیکت‌ها
         register_rest_route('raha/v1', '/tickets', [
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [__CLASS__, 'get_tickets_data'],
-            'permission_callback' => [__CLASS__, 'check_permission'],
+            'permission_callback' => [__CLASS__, 'can_manage_tickets'],
+        ]);
+        register_rest_route('raha/v1', '/tickets/(?P<id>\d+)', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [__CLASS__, 'get_ticket_details'],
+            'permission_callback' => [__CLASS__, 'can_manage_tickets'],
+        ]);
+        register_rest_route('raha/v1', '/tickets/reply', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [__CLASS__, 'reply_ticket'],
+            'permission_callback' => [__CLASS__, 'can_manage_tickets'],
         ]);
 
         // مسیر لاگ‌های امنیتی
@@ -75,7 +85,7 @@ class Raha_Admin_API {
         register_rest_route('raha/v1', '/notifications', [
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [__CLASS__, 'get_live_notifications'],
-            'permission_callback' => [__CLASS__, 'check_permission'],
+            'permission_callback' => [__CLASS__, 'can_access_studio'],
         ]);
     }
 
@@ -83,18 +93,45 @@ class Raha_Admin_API {
         return current_user_can('manage_options');
     }
 
+    public static function can_access_studio() {
+        return Raha_RBAC::can_cap('raha_access_studio');
+    }
+
+    public static function can_manage_orders() {
+        return Raha_RBAC::can_cap('raha_manage_orders');
+    }
+
+    public static function can_view_invoices() {
+        return Raha_RBAC::can_cap('raha_view_invoices') || current_user_can('raha_manage_invoices');
+    }
+
+    public static function can_manage_tickets() {
+        return Raha_RBAC::can_cap('raha_manage_tickets');
+    }
+
     public static function get_dashboard_data() {
         // استفاده از Transient برای کش کردن آمار (سرعت بالا)
         $cached_data = get_transient('raha_dashboard_stats');
-        if (false !== $cached_data) {
-            return rest_ensure_response($cached_data);
+        if (is_array($cached_data) && ($cached_data['schema'] ?? 0) === 2) {
+            return rest_ensure_response(self::with_current_revenue($cached_data));
         }
 
         global $wpdb;
         $total_orders = $wpdb->get_var("SELECT COUNT(ID) FROM {$wpdb->posts} WHERE post_type = 'raha_order' AND post_status = 'publish'");
-        $total_revenue = $wpdb->get_var("SELECT SUM(total) FROM {$wpdb->prefix}raha_invoices WHERE status = 'paid'");
-        $active_tickets = $wpdb->get_var("SELECT COUNT(ID) FROM {$wpdb->posts} WHERE post_type = 'raha_ticket' AND post_status = 'publish'");
-        $pending_orders = $wpdb->get_var("SELECT COUNT(ID) FROM {$wpdb->posts} WHERE post_type = 'raha_order' AND post_status = 'publish'");
+        $active_tickets = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
+             LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = 'ticket_status'
+             WHERE p.post_type = 'raha_ticket' AND p.post_status = 'publish'
+             AND (m.meta_id IS NULL OR m.meta_value = '' OR m.meta_value IN (%s, %s, %s))",
+            'open', 'progress', 'waiting'
+        ));
+        $pending_orders = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
+             LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = 'order_status'
+             WHERE p.post_type = 'raha_order' AND p.post_status = 'publish'
+             AND (m.meta_id IS NULL OR m.meta_value = '' OR m.meta_value IN (%s, %s))",
+            'new', 'review'
+        ));
 
         $recent_orders = get_posts(['post_type' => 'raha_order', 'posts_per_page' => 5, 'post_status' => 'publish']);
         $recent_data = [];
@@ -112,9 +149,9 @@ class Raha_Admin_API {
         }
 
         $response_data = [
+            'schema' => 2,
             'stats' => [
                 'total_orders'   => (int) $total_orders,
-                'total_revenue'  => (int) $total_revenue,
                 'active_tickets' => (int) $active_tickets,
                 'pending_orders' => (int) $pending_orders,
             ],
@@ -124,7 +161,17 @@ class Raha_Admin_API {
         // ذخیره در کش برای ۵ دقیقه
         set_transient('raha_dashboard_stats', $response_data, 5 * MINUTE_IN_SECONDS);
 
-        return rest_ensure_response($response_data);
+        return rest_ensure_response(self::with_current_revenue($response_data));
+    }
+
+    private static function with_current_revenue($data) {
+        global $wpdb;
+        // فاکتورها ممکن است بیرون از مسیرهای سفارش تغییر کنند؛ مبلغ را کش نکن.
+        $table = $wpdb->prefix . 'raha_invoices';
+        $data['stats']['total_revenue'] = (float) $wpdb->get_var(
+            "SELECT COALESCE(SUM(total), 0) FROM {$table} WHERE status = 'paid'"
+        );
+        return $data;
     }
 
     public static function get_orders_data(WP_REST_Request $request) {
@@ -154,6 +201,7 @@ class Raha_Admin_API {
             $orders[] = [
                 'id'       => $post->ID,
                 'code'     => $meta['tracking_code'][0] ?? '—',
+                'user_id'  => (int) $post->post_author,
                 'customer' => $meta['full_name'][0] ?? 'ناشناس',
                 'contact'  => $meta['contact_value'][0] ?? '—',
                 'service'  => $meta['service'][0] ?? '—',
@@ -174,16 +222,16 @@ class Raha_Admin_API {
 
     public static function update_order_status(WP_REST_Request $request) {
         $params = $request->get_json_params();
-        $order_ids = isset($params['ids']) ? array_map('absint', $params['ids']) : [];
+        $order_ids = isset($params['ids']) && is_array($params['ids']) ? array_map('absint', $params['ids']) : [];
         $new_status = sanitize_text_field($params['status'] ?? '');
 
-        if (empty($order_ids) || empty($new_status)) {
+        if (empty($order_ids) || count($order_ids) > 100 || !raha_validate_order_status($new_status)) {
             return new WP_Error('invalid_data', 'داده‌های ارسالی نامعتبر است.', ['status' => 400]);
         }
 
         $updated_count = 0;
         foreach ($order_ids as $id) {
-            if (get_post_type($id) === 'raha_order') {
+            if (get_post_type($id) === 'raha_order' && get_post_status($id) === 'publish') {
                 $old_status = get_post_meta($id, 'order_status', true);
                 update_post_meta($id, 'order_status', $new_status);
                 $updated_count++;
@@ -286,6 +334,45 @@ class Raha_Admin_API {
         ]);
     }
 
+    public static function get_ticket_details(WP_REST_Request $request) {
+        $ticket = get_post(absint($request['id']));
+        if (!$ticket || $ticket->post_type !== 'raha_ticket' || $ticket->post_status !== 'publish') {
+            return new WP_Error('invalid_ticket', 'تیکت یافت نشد.', ['status' => 404]);
+        }
+        $replies = [];
+        foreach (get_comments(['post_id' => $ticket->ID, 'status' => 'approve', 'order' => 'ASC']) as $comment) {
+            $replies[] = ['author' => $comment->comment_author, 'message' => $comment->comment_content];
+        }
+        return rest_ensure_response([
+            'id' => $ticket->ID,
+            'subject' => $ticket->post_title,
+            'message' => $ticket->post_content,
+            'replies' => $replies,
+        ]);
+    }
+
+    public static function reply_ticket(WP_REST_Request $request) {
+        $ticket = get_post(absint($request->get_param('ticket_id')));
+        $raw_message = $request->get_param('message');
+        $message = is_string($raw_message) ? sanitize_textarea_field($raw_message) : '';
+        if (!$ticket || $ticket->post_type !== 'raha_ticket' || $ticket->post_status !== 'publish'
+            || trim($message) === '' || strlen($message) > 10000) {
+            return new WP_Error('invalid_reply', 'تیکت یا متن پاسخ نامعتبر است.', ['status' => 400]);
+        }
+        $user = wp_get_current_user();
+        $comment_id = wp_insert_comment([
+            'comment_post_ID' => $ticket->ID,
+            'comment_author' => $user->display_name,
+            'comment_author_email' => $user->user_email,
+            'comment_content' => $message,
+            'comment_approved' => 1,
+            'user_id' => $user->ID,
+        ]);
+        if (!$comment_id) return new WP_Error('save_failed', 'پاسخ ذخیره نشد.', ['status' => 500]);
+        update_post_meta($ticket->ID, 'ticket_status', 'waiting');
+        return rest_ensure_response(['success' => true, 'comment_id' => $comment_id]);
+    }
+
     public static function get_audit_logs(WP_REST_Request $request) {
         global $wpdb;
         $page = (int) $request->get_param('page') ?: 1;
@@ -373,8 +460,10 @@ class Raha_Admin_API {
     public static function get_live_notifications() {
         global $wpdb;
         // در اینجا می‌توانیم چک کنیم آیا سفارش جدید یا تیکت جدیدی در ۳۰ دقیقه اخیر ثبت شده است
-        $recent_orders = $wpdb->get_var("SELECT COUNT(ID) FROM {$wpdb->posts} WHERE post_type = 'raha_order' AND post_status = 'publish' AND post_date > DATE_SUB(NOW(), INTERVAL 30 MINUTE)");
-        $recent_tickets = $wpdb->get_var("SELECT COUNT(ID) FROM {$wpdb->posts} WHERE post_type = 'raha_ticket' AND post_status = 'publish' AND post_date > DATE_SUB(NOW(), INTERVAL 30 MINUTE)");
+        $recent_orders = self::can_manage_orders()
+            ? $wpdb->get_var("SELECT COUNT(ID) FROM {$wpdb->posts} WHERE post_type = 'raha_order' AND post_status = 'publish' AND post_date > DATE_SUB(NOW(), INTERVAL 30 MINUTE)") : 0;
+        $recent_tickets = self::can_manage_tickets()
+            ? $wpdb->get_var("SELECT COUNT(ID) FROM {$wpdb->posts} WHERE post_type = 'raha_ticket' AND post_status = 'publish' AND post_date > DATE_SUB(NOW(), INTERVAL 30 MINUTE)") : 0;
         
         return rest_ensure_response([
             'count' => (int)$recent_orders + (int)$recent_tickets

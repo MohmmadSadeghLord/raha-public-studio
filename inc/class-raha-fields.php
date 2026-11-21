@@ -223,6 +223,17 @@ class Raha_Meta_Box {
         if (!current_user_can('edit_post', $post_id)) return;
         if (!in_array($post->post_type, $this->post_types, true)) return;
 
+        if ($post->post_type === 'raha_order' && $this->id === 'raha_order_details') {
+            $status = sanitize_key(wp_unslash($_POST['order_status'] ?? ''));
+            $amount = wp_unslash($_POST['amount'] ?? '0');
+            $paid = wp_unslash($_POST['amount_paid'] ?? '0');
+            $validated = raha_validate_order_update($status, $amount, $paid);
+            if (is_wp_error($validated)) {
+                set_transient('raha_order_validation_' . get_current_user_id(), $validated->get_error_message(), MINUTE_IN_SECONDS);
+                return;
+            }
+        }
+
         foreach ($this->fields as $field) {
             $id = $field['id'];
             $type = $field['type'] ?? 'text';
@@ -232,6 +243,9 @@ class Raha_Meta_Box {
             } else {
                 update_post_meta($post_id, $id, $clean);
             }
+        }
+        if ($post->post_type === 'raha_order' && $this->id === 'raha_order_details') {
+            delete_transient('raha_dashboard_stats');
         }
     }
 }

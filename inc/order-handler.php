@@ -11,6 +11,11 @@ function raha_handle_submit_order() {
     if (!check_ajax_referer('raha_order_nonce', 'nonce', false)) {
         wp_send_json_error(['message' => 'نشست منقضی شده. صفحه را رفرش کنید.']);
     }
+    if (!raha_check_submission_limit('order')) {
+        wp_send_json_error(['message' => 'تعداد درخواست‌ها بیش از حد مجاز است. لطفاً ۱۵ دقیقه دیگر تلاش کنید.'], 429);
+    }
+    $file_error = raha_validate_order_files();
+    if ($file_error) wp_send_json_error(['message' => $file_error], 400);
 
     $f = function ($key, $type = 'text') {
         $val = $_POST[$key] ?? '';
@@ -68,7 +73,8 @@ function raha_handle_submit_order() {
     }
 
     /* کد پیگیری */
-    $code = 'REQ-' . date('ymd') . '-' . strtoupper(wp_generate_password(4, false, false));
+    $code = 'REQ-' . date('ymd') . '-' . strtoupper(wp_generate_password(8, false, false));
+    $access_token = bin2hex(random_bytes(32));
 
     /* نویسنده: اگر لاگین است */
     $author = is_user_logged_in() ? get_current_user_id() : 0;
@@ -78,7 +84,10 @@ function raha_handle_submit_order() {
         'post_status' => 'publish',
         'post_title'  => $code . ' — ' . $data['full_name'],
         'post_author' => $author,
-        'meta_input'  => array_merge($data, ['tracking_code' => $code]),
+        'meta_input'  => array_merge($data, [
+            'tracking_code' => $code,
+            '_raha_access_token_hash' => hash('sha256', $access_token),
+        ]),
     ], true);
 
     if (is_wp_error($post_id)) {
@@ -89,16 +98,41 @@ function raha_handle_submit_order() {
     raha_save_order_files($post_id);
 
     /* ایمیل */
-    raha_send_order_emails($post_id, $data, $code);
+    raha_send_order_emails($post_id, $data, $code, $access_token);
 
     $thankyou = raha_page_url('thank-you');
     wp_send_json_success([
         'tracking' => $code,
-        'redirect' => add_query_arg('tracking', $code, $thankyou),
+        'redirect' => add_query_arg(['tracking' => $code, 'access' => $access_token], $thankyou),
     ]);
 }
 
 /* ---------- آپلود فایل ---------- */
+function raha_validate_order_files() {
+    $allowed = [
+        'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+        'webp' => 'image/webp', 'pdf' => 'application/pdf',
+    ];
+    $total_size = 0;
+    foreach (['logoFile', 'extraFile'] as $input) {
+        if (empty($_FILES[$input]['name'])) continue;
+        $file = $_FILES[$input];
+        if (is_array($file['name']) || !isset($file['error'], $file['size'], $file['tmp_name']) || $file['error'] !== UPLOAD_ERR_OK) {
+            return 'آپلود فایل کامل نشد. لطفاً دوباره تلاش کنید.';
+        }
+        if ($file['size'] <= 0 || $file['size'] > 5 * MB_IN_BYTES) {
+            return 'حجم هر فایل باید کمتر از ۵ مگابایت باشد.';
+        }
+        $total_size += $file['size'];
+        if ($total_size > 10 * MB_IN_BYTES) return 'حجم مجموع فایل‌ها بیش از حد مجاز است.';
+        $checked = wp_check_filetype_and_ext($file['tmp_name'], $file['name'], $allowed);
+        if (!$checked['ext'] || !$checked['type']) {
+            return 'فقط فایل‌های JPG، PNG، WebP و PDF پذیرفته می‌شوند.';
+        }
+    }
+    return '';
+}
+
 function raha_save_order_files($order_id) {
     if (empty($_FILES)) return;
     require_once ABSPATH . 'wp-admin/includes/file.php';
@@ -108,7 +142,13 @@ function raha_save_order_files($order_id) {
     $map = ['logoFile' => 'logo_file', 'extraFile' => 'extra_file'];
     foreach ($map as $input => $meta_key) {
         if (empty($_FILES[$input]['name'])) continue;
-        $upload = wp_handle_upload($_FILES[$input], ['test_form' => false]);
+        $upload = wp_handle_upload($_FILES[$input], [
+            'test_form' => false,
+            'mimes' => [
+                'jpg|jpeg' => 'image/jpeg', 'png' => 'image/png',
+                'webp' => 'image/webp', 'pdf' => 'application/pdf',
+            ],
+        ]);
         if (isset($upload['error'])) continue;
 
         $attach_id = wp_insert_attachment([
@@ -125,7 +165,7 @@ function raha_save_order_files($order_id) {
 }
 
 /* ---------- ایمیل ---------- */
-function raha_send_order_emails($order_id, $data, $code) {
+function raha_send_order_emails($order_id, $data, $code, $access_token) {
     $admin_email = get_option('admin_email');
     $site_name   = get_bloginfo('name');
     $edit_link   = admin_url('post.php?post=' . $order_id . '&action=edit');
@@ -146,7 +186,7 @@ function raha_send_order_emails($order_id, $data, $code) {
         $cust_body  = "سلام {$data['full_name']},\n\n";
         $cust_body .= "درخواست شما با کد پیگیری {$code} دریافت شد.\n";
         $cust_body .= "به‌زودی برای هماهنگی با شما تماس می‌گیریم.\n\n";
-        $cust_body .= "پیگیری وضعیت: " . add_query_arg('tracking', $code, raha_page_url('thank-you')) . "\n";
+        $cust_body .= "پیگیری وضعیت: " . add_query_arg(['tracking' => $code, 'access' => $access_token], raha_page_url('thank-you')) . "\n";
         wp_mail($data['contact_value'], "دریافت درخواست شما — {$site_name}", $cust_body);
     }
 }

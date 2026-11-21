@@ -4,6 +4,7 @@ get_header();
 ?>
 
 <?php get_template_part('parts/hero'); ?>
+<?php get_template_part('parts/services'); ?>
 <?php get_template_part('parts/pricing'); ?>
 <?php get_template_part('parts/portfolio'); ?>
 <?php get_template_part('parts/about'); ?>
